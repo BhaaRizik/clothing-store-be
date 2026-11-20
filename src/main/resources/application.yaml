@@ -1,5 +1,25 @@
+# Shared configuration for every profile. Environment-specific values live in
+# application-local.yaml / application-prod.yaml and are bound from environment variables.
 server:
   port: ${PORT:8080}
+
 spring:
   application:
     name: clothing-store-be
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  data:
+    mongodb:
+      # Index names in the @Document mappings match docker/mongo-init/seed.js.
+      auto-index-creation: true
+
+store:
+  # ISO 4217 code returned with every money amount.
+  currency: ${STORE_CURRENCY:ILS}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  paths-to-match: /api/**

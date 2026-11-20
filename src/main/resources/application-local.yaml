@@ -1,0 +1,10 @@
+# Local development profile. Non-secret defaults only.
+# `docker compose up -d` starts MongoDB on localhost:27018 (see README.md).
+spring:
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27018/clothing_store}
+
+app:
+  cors:
+    # Comma-separated list of allowed frontend origins.
+    allowed-origins: ${FRONTEND_ORIGINS:http://localhost:5173}

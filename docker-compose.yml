@@ -1,15 +1,3 @@
-# Local development infrastructure for clothing-store-be.
-# Only MongoDB runs here; start the Spring Boot app separately (./mvnw spring-boot:run).
-#
-# LOCAL DEVELOPMENT ONLY: MongoDB runs WITHOUT authentication and the port is
-# published on 127.0.0.1 only, so it is reachable solely from this machine.
-# Never reuse this configuration for shared, staging or production environments
-# (those use MongoDB Atlas via the MONGODB_URI environment variable).
-#
-# Seed data in ./docker/mongo-init is loaded automatically ONLY on the first
-# start with an empty data volume. To re-seed, remove the volume
-# (docker compose down -v) - this deletes all local data.
-
 name: clothing-store
 
 services:
@@ -18,7 +6,6 @@ services:
     container_name: clothing-store-mongo
     restart: unless-stopped
     ports:
-      # Host 27018 -> container 27017 (27017 is commonly taken by a native mongod).
       - "127.0.0.1:27018:27017"
     environment:
       MONGO_INITDB_DATABASE: clothing_store

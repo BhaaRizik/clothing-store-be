@@ -1,16 +1,3 @@
-// Local DEMO data for clothing-store-be (Jira SCRUM-5: storefront catalog).
-//
-// Executed by the official mongo image ONLY on the first container start with an
-// empty /data/db volume (scripts in /docker-entrypoint-initdb.d). All names, prices
-// and images are fictional sample values, not real store data.
-//
-// Schema contract (mapped by the backend; no `_class` field):
-//   categories: _id, slug (unique), name, description, parentId, imageUrl,
-//               displayOrder (int), active, createdAt, updatedAt
-//   products:   _id, slug (unique), name, description, categoryId (ObjectId),
-//               brand, images [{url, alt}], basePrice (Decimal128),
-//               salePrice (Decimal128|null), active, featured, createdAt, updatedAt
-
 db = db.getSiblingDB('clothing_store');
 
 if (db.categories.countDocuments({}) > 0) {
@@ -20,12 +7,9 @@ if (db.categories.countDocuments({}) > 0) {
 
 const now = new Date();
 const daysAgo = (d) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
-const money = (v) => NumberDecimal(v); // always pass "x.yy" strings
-// Illustrations are served by the backend from src/main/resources/static/images/catalog/
-// (regenerate with scripts/generate_catalog_images.py). URLs are relative to the API origin.
+const money = (v) => NumberDecimal(v);
 const img = (slug, alt) => [{ url: `/images/catalog/${slug}.svg`, alt: alt }];
 
-// ---------------------------------------------------------------- categories
 const cat = {
   men: ObjectId(),
   women: ObjectId(),
@@ -61,7 +45,6 @@ db.categories.insertMany([
   category(cat.archive, 'archive', 'Archive', 'Retired collection - hidden from the storefront.', 6, false, null),
 ]);
 
-// ------------------------------------------------------------------ products
 const product = (p) => ({
   _id: ObjectId(),
   slug: p.slug,
@@ -79,7 +62,6 @@ const product = (p) => ({
 });
 
 const products = [
-  // ---- Men (6, one inactive, one very long name)
   { slug: 'men-classic-oxford-shirt', name: 'Classic Oxford Shirt', categoryId: cat.men, brand: 'Northline',
     description: 'Breathable cotton Oxford shirt with a button-down collar.', basePrice: '49.90',
     featured: true, ageDays: 2, images: img('men-classic-oxford-shirt', 'Light blue Oxford shirt on a hanger') },
@@ -102,7 +84,6 @@ const products = [
     description: 'Discontinued item kept for testing inactive products.', basePrice: '39.90',
     active: false, ageDays: 1, images: img('men-retired-denim-vest', 'Washed denim vest') },
 
-  // ---- Women (6)
   { slug: 'women-floral-midi-dress', name: 'Floral Midi Dress', categoryId: cat.women, brand: 'Maison Lila',
     description: 'Flowing midi dress with a floral print and tie waist.', basePrice: '69.90',
     featured: true, ageDays: 3, images: img('women-floral-midi-dress', 'Floral print midi dress') },
@@ -122,9 +103,6 @@ const products = [
     description: 'Fitted ribbed tank top, a layering essential.', basePrice: '14.90',
     ageDays: 40, images: img('women-ribbed-tank-top', 'White ribbed tank top') },
 
-  // ---- Kids: intentionally NO products (exercises the empty state)
-
-  // ---- Shoes (5)
   { slug: 'shoes-white-leather-sneakers', name: 'White Leather Sneakers', categoryId: cat.shoes, brand: 'Stride',
     description: 'Minimal low-top sneakers in smooth leather.', basePrice: '89.90',
     featured: true, ageDays: 4, images: img('shoes-white-leather-sneakers', 'Pair of white leather sneakers') },
@@ -141,7 +119,6 @@ const products = [
     description: 'Easy canvas slip-on shoes.', basePrice: '39.90',
     ageDays: 45, images: img('shoes-canvas-slip-ons', 'Navy canvas slip-on shoes') },
 
-  // ---- Accessories (5)
   { slug: 'acc-leather-belt', name: 'Leather Belt', categoryId: cat.accessories, brand: 'Northline',
     description: 'Full-grain leather belt with a brushed metal buckle.', basePrice: '34.90',
     ageDays: 5, images: img('acc-leather-belt', 'Brown leather belt with buckle') },
@@ -161,7 +138,6 @@ const products = [
 
 db.products.insertMany(products);
 
-// ------------------------------------------------------------------- indexes
 db.categories.createIndex({ slug: 1 }, { unique: true, name: 'uk_categories_slug' });
 db.products.createIndex({ slug: 1 }, { unique: true, name: 'uk_products_slug' });
 db.products.createIndex({ categoryId: 1, active: 1, createdAt: -1 }, { name: 'ix_products_category_active_created' });

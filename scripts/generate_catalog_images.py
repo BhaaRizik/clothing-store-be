@@ -1,8 +1,3 @@
-"""Generates catalog illustration SVGs (600x800) for the clothing-store sample data.
-
-Usage (from the repo root):
-  python3 scripts/generate_catalog_images.py src/main/resources/static/images/catalog /tmp/catalog-sheet.svg
-"""
 import os
 import sys
 
@@ -21,11 +16,10 @@ def hanger(y=0):
     )
 
 
-def ol(stroke):  # common outline attributes
+def ol(stroke):
     return f'stroke="{stroke}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"'
 
 
-# ---------------------------------------------------------------- items
 def oxford_shirt(p):
     f, s = '#A9C8E8', '#5F86AD'
     buttons = ''.join(f'<circle cx="300" cy="{y}" r="6" fill="#F4F8FC" stroke="{s}" stroke-width="2"/>' for y in (335, 395, 455, 515, 575, 630))
@@ -301,7 +295,6 @@ def sunglasses(p):
 
 
 ITEMS = {
-    # slug: (draw_fn, background, title)
     'men-classic-oxford-shirt': (oxford_shirt, '#EEF3F8', 'Light blue Oxford shirt on a hanger'),
     'men-slim-chino-trousers': (chinos, '#F5F1EA', 'Beige slim chino trousers'),
     'men-wool-blend-overcoat': (overcoat, '#ECEDEF', 'Charcoal wool overcoat'),
@@ -324,7 +317,6 @@ ITEMS = {
 
 
 def compose(parts, prefix):
-    """parts: list of (fn, dx, dy, scale)."""
     return ''.join(f'<g transform="translate({dx},{dy}) scale({sc})">{fn(prefix + str(i))}</g>' for i, (fn, dx, dy, sc) in enumerate(parts))
 
 

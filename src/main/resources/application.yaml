@@ -20,7 +20,7 @@ app:
       default-page-size: 20
 
 store:
-  currency: ${STORE_CURRENCY}
+  currency: ${STORE_CURRENCY:ILS}
 
 springdoc:
   api-docs:

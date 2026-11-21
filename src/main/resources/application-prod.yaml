@@ -1,3 +1,3 @@
-MONGODB_URI: ''
-FRONTEND_ORIGINS: ''
-STORE_CURRENCY: ILS
+MONGODB_URI: mongodb+srv://bhaarizik95_db_user:X25cdADd58nfHwK6@cluster0.tgqioo4.mongodb.net/clothing_store?retryWrites=true&w=majority
+#FRONTEND_ORIGINS: https://clothing-store-fe.onrender.com
+FRONTEND_ORIGINS: http://localhost:5173

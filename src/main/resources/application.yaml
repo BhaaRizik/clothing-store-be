@@ -1,5 +1,30 @@
 server:
   port: ${PORT:8080}
+
 spring:
   application:
     name: clothing-store-be
+  mongodb:
+    uri: ${MONGODB_URI}
+  data:
+    mongodb:
+      auto-index-creation: true
+
+app:
+  cors:
+    allowed-origins: ${FRONTEND_ORIGINS}
+  catalog:
+    pagination:
+      max-page: 10000
+      max-page-size: 50
+      default-page-size: 20
+
+store:
+  currency: ${STORE_CURRENCY}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  paths-to-match: /api/**

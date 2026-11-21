@@ -1,0 +1,3 @@
+MONGODB_URI: mongodb://localhost:27018/clothing_store
+FRONTEND_ORIGINS: http://localhost:5173
+STORE_CURRENCY: ILS

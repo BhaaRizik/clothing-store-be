@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Bean;
 import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.utility.DockerImageName;
 
-/** Throwaway MongoDB (same image as docker-compose) wired in via {@code @ServiceConnection}. */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 

@@ -1,10 +1,3 @@
-# Production profile (Render). Every value MUST come from the environment; there are
-# deliberately no defaults so a missing variable fails startup instead of misconfiguring.
-spring:
-  mongodb:
-    uri: ${MONGODB_URI}
-
-app:
-  cors:
-    # Comma-separated list of allowed frontend origins. Never "*".
-    allowed-origins: ${FRONTEND_ORIGINS}
+MONGODB_URI: ''
+FRONTEND_ORIGINS: ''
+STORE_CURRENCY: ILS

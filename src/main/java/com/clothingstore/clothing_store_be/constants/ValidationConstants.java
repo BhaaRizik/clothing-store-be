@@ -1,0 +1,20 @@
+package com.clothingstore.clothing_store_be.constants;
+
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class ValidationConstants {
+
+    public static final String ORIGIN_PATTERN = "https?://[A-Za-z0-9.-]+(:\\d{1,5})?";
+    public static final String ORIGIN_PATTERN_MESSAGE = "must be an explicit origin like https://shop.example.com[:port]";
+    public static final String CURRENCY_CODE_PATTERN = "[A-Z]{3}";
+    public static final String PRODUCT_SORT_PATTERN = ProductSortParameters.NEWEST + "|" + ProductSortParameters.NAME + "|"
+            + ProductSortParameters.PRICE_ASC + "|" + ProductSortParameters.PRICE_DESC;
+    public static final String PRODUCT_SORT_MESSAGE = "must be one of: " + ProductSortParameters.NEWEST + ", "
+            + ProductSortParameters.NAME + ", " + ProductSortParameters.PRICE_ASC + ", " + ProductSortParameters.PRICE_DESC;
+    public static final String MAX_VALUE_MESSAGE = "must be less than or equal to the configured maximum";
+    public static final String MAX_VALUE_MESSAGE_FORMAT = "must be less than or equal to %d";
+    public static final String INVALID_TYPE_MESSAGE_PREFIX = "must be a valid ";
+    public static final String UNKNOWN_TYPE_NAME = "value";
+}

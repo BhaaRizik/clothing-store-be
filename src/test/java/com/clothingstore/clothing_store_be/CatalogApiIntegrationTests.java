@@ -1,8 +1,8 @@
 package com.clothingstore.clothing_store_be;
 
-import com.clothingstore.clothing_store_be.category.Category;
-import com.clothingstore.clothing_store_be.product.Product;
-import com.clothingstore.clothing_store_be.product.ProductImage;
+import com.clothingstore.clothing_store_be.model.Category;
+import com.clothingstore.clothing_store_be.model.Product;
+import com.clothingstore.clothing_store_be.model.ProductImage;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import org.bson.Document;
@@ -20,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -39,21 +40,10 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * End-to-end HTTP tests for the public catalog API (Jira SCRUM-5, ACs SCRUM-15 / SCRUM-16).
- *
- * <p>Runs the full application on a random port against a real MongoDB (Testcontainers) and talks to it
- * with the JDK {@link HttpClient}, so Tomcat URL decoding, the CORS filter chain, method validation,
- * Jackson serialization and Decimal128/ObjectId mapping are all exercised for real.
- *
- * <p>Seed data is rebuilt before every test with fixed ObjectIds and timestamps so ordering assertions are
- * deterministic. Most documents are inserted as raw BSON shaped like {@code docker/mongo-init/seed.js}
- * (no {@code _class}); a few go through {@link MongoTemplate#insert(Object)} so documents carrying
- * {@code _class} are covered too.
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "app.cors.allowed-origins=" + CatalogApiIntegrationTests.ALLOWED_ORIGIN,
         "store.currency=ILS"})
+@ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
 class CatalogApiIntegrationTests {
 
@@ -62,7 +52,6 @@ class CatalogApiIntegrationTests {
 
     private static final Instant BASE = Instant.parse("2026-01-10T00:00:00Z");
 
-    // Fixed ids so the "_id ascending" tie-breaker is predictable.
     private static final ObjectId MEN = new ObjectId("650000000000000000000a01");
     private static final ObjectId WOMEN = new ObjectId("650000000000000000000a02");
     private static final ObjectId ACCESSORIES = new ObjectId("650000000000000000000a03");
@@ -77,7 +66,6 @@ class CatalogApiIntegrationTests {
     private static final ObjectId TEE_B = new ObjectId("650000000000000000000b06");
     private static final ObjectId TEE_A = new ObjectId("650000000000000000000b07");
 
-    /** All active products, in the order each sort option must return them. */
     private static final List<String> NEWEST = List.of("kids-tee-b", "kids-tee-a", "men-shirt", "men-socks", "women-dress", "men-coat");
     private static final List<String> BY_NAME = List.of("men-socks", "kids-tee-b", "kids-tee-a", "men-shirt", "women-dress", "men-coat");
     private static final List<String> PRICE_ASC = List.of("women-dress", "men-socks", "kids-tee-b", "kids-tee-a", "men-shirt", "men-coat");
@@ -94,8 +82,6 @@ class CatalogApiIntegrationTests {
     @Autowired
     private MongoTemplate mongoTemplate;
 
-    // ------------------------------------------------------------------------------------------ seed
-
     @BeforeEach
     void seed() {
         mongoTemplate.getCollection("categories").deleteMany(new Document());
@@ -104,27 +90,19 @@ class CatalogApiIntegrationTests {
         mongoTemplate.getCollection("categories").insertMany(List.of(
                 category(MEN, "men", "Men", "Clothing for men.", 1, true, "https://img.example/men.jpg"),
                 category(WOMEN, "women", "Women", null, 2, true, null),
-                // empty category (no products), same displayOrder as "men": name decides the order
                 category(ACCESSORIES, "accessories", "Accessories", null, 1, true, null),
                 category(ARCHIVE, "archive", "Archive", "Retired", 0, false, null)));
-        // Inserted through Spring Data so the stored document carries _class.
         mongoTemplate.insert(new Category(KIDS.toHexString(), "kids", "Kids", null, null, null, 2, true, BASE, BASE));
 
         mongoTemplate.getCollection("products").insertMany(List.of(
                 product(SHIRT, "men-shirt", "Classic Shirt", MEN, "Acme", "49.90", "39.90", true, true, 2,
                         List.of(image("https://img.example/shirt-front.jpg", "Front"),
                                 image("https://img.example/shirt-back.jpg", "Back"))),
-                // no "images" field at all + whole-number price
                 product(COAT, "men-coat", "Wool Coat", MEN, null, "189", null, true, false, 20, null),
-                // one fraction digit stored in Decimal128
                 product(SOCKS, "men-socks", "Ankle Socks", MEN, null, "10.5", null, true, false, 3, List.of()),
-                // inactive: newest, cheapest-but-one, featured - must never appear
                 product(RETIRED, "men-retired", "Retired Tee", MEN, null, "5.00", null, false, true, 0, List.of()),
-                // cheapest; numeric vs lexicographic sort check ("9.99" > "189" as strings)
                 product(DRESS, "women-dress", "Summer Dress", WOMEN, null, "9.99", null, true, true, 5,
                         List.of(image("https://img.example/dress.jpg", "Dress")))));
-        // Two products identical on every sort key (name, price, createdAt); only _id differs.
-        // TEE_A (higher _id) is inserted first so natural order differs from _id order.
         mongoTemplate.insert(new Product(TEE_A.toHexString(), "kids-tee-a", "Basic Tee", "Tee", KIDS.toHexString(), null,
                 List.of(new ProductImage("https://img.example/tee-a.jpg", "Tee A")), new BigDecimal("25.00"), null,
                 true, false, daysAgo(1), daysAgo(1)));
@@ -162,8 +140,6 @@ class CatalogApiIntegrationTests {
         }
         return doc;
     }
-
-    // ------------------------------------------------------------------------------------------ http helpers
 
     record Response(int status, java.net.http.HttpHeaders headers, String body) {
 
@@ -239,8 +215,6 @@ class CatalogApiIntegrationTests {
         return keys;
     }
 
-    // ============================================================================================ categories
-
     @Nested
     @DisplayName("GET /api/v1/categories")
     class Categories {
@@ -303,8 +277,6 @@ class CatalogApiIntegrationTests {
         }
     }
 
-    // ============================================================================================ product list
-
     @Nested
     @DisplayName("GET /api/v1/products")
     class ProductList {
@@ -329,7 +301,6 @@ class CatalogApiIntegrationTests {
             Map<String, Object> shirt = response.<List<Map<String, Object>>>read("$.items[?(@.slug == 'men-shirt')]").getFirst();
             assertThat(shirt).containsOnlyKeys("id", "slug", "name", "primaryImage", "price", "salePrice");
             assertThat(shirt).containsEntry("id", SHIRT.toHexString()).containsEntry("name", "Classic Shirt");
-            // primary image is the FIRST image
             assertThat(shirt.get("primaryImage")).isEqualTo(Map.of("url", "https://img.example/shirt-front.jpg", "alt", "Front"));
             assertThat(shirt.get("price")).isEqualTo(Map.of("amount", "49.90", "currency", "ILS"));
             assertThat(shirt.get("salePrice")).isEqualTo(Map.of("amount", "39.90", "currency", "ILS"));
@@ -339,7 +310,6 @@ class CatalogApiIntegrationTests {
         void productWithoutImagesHasExplicitNullPrimaryImage() {
             Response response = get("/api/v1/products?category=men&sort=name");
 
-            // men-coat: "images" field missing in Mongo; men-socks: empty array
             for (String slug : List.of("men-coat", "men-socks")) {
                 Map<String, Object> card = response.<List<Map<String, Object>>>read("$.items[?(@.slug == '" + slug + "')]").getFirst();
                 assertThat(card).containsKey("primaryImage");
@@ -435,7 +405,6 @@ class CatalogApiIntegrationTests {
 
         @Test
         void tieBreakerOrdersEqualSortKeysByIdAndIsStableAcrossRepeatedCalls() {
-            // kids-tee-a and kids-tee-b tie on name, price and createdAt; _id decides (b < a).
             for (int i = 0; i < 3; i++) {
                 assertThat(slugs(get("/api/v1/products?category=kids&sort=name&size=1&page=0"))).containsExactly("kids-tee-b");
                 assertThat(slugs(get("/api/v1/products?category=kids&sort=name&size=1&page=1"))).containsExactly("kids-tee-a");
@@ -467,11 +436,6 @@ class CatalogApiIntegrationTests {
             assertThat(response.<Integer>read("$.totalPages")).isEqualTo(2);
         }
 
-        /**
-         * DEFECT D1 regression. page * size beyond Integer.MAX_VALUE: the 64-bit offset is narrowed to int when the
-         * skip is applied, so a page far past the end either returns a wrong (non-empty) page or a 500.
-         * Remove {@code @Disabled} once fixed (e.g. by capping {@code page} so page*size fits in an int).
-         */
         @ParameterizedTest(name = "page={0}, size={1}")
         @CsvSource({"1073741824, 4", "2147483647, 2", "2147483647, 50"})
         void hugePageIndexDoesNotWrapAroundOrFail(String page, String size) {
@@ -520,6 +484,33 @@ class CatalogApiIntegrationTests {
         }
 
         @Test
+        void configuredPaginationMaximumsAreAcceptedInclusive() {
+            Response response = get("/api/v1/products?page=10000&size=50");
+
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(response.<Integer>read("$.page")).isEqualTo(10000);
+            assertThat(response.<List<Object>>read("$.items")).isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0}={1}")
+        @CsvSource({"page, 10001, 10000", "size, 51, 50"})
+        void valueAboveConfiguredMaximumReportsTheConfiguredLimit(String param, String value, String limit) {
+            Response response = get("/api/v1/products?" + param + "=" + value);
+
+            assertProblem(response, 400, "VALIDATION_ERROR");
+            assertThat(response.<List<Map<String, Object>>>read("$.errors")).containsExactly(
+                    Map.of("field", param, "message", "must be less than or equal to " + limit));
+        }
+
+        @Test
+        void maximumViolationsAreReportedTogetherWithOtherParameterErrors() {
+            Response response = get("/api/v1/products?page=10001&size=51&sort=bogus");
+
+            assertProblem(response, 400, "VALIDATION_ERROR");
+            assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly("page", "size", "sort");
+        }
+
+        @Test
         void multipleInvalidParametersAreAllReportedSortedByField() {
             Response response = get("/api/v1/products?page=-1&size=0&sort=bogus");
 
@@ -529,7 +520,6 @@ class CatalogApiIntegrationTests {
 
         @Test
         void validationRunsBeforeCategoryLookup() {
-            // invalid page + unknown category -> 400, not 404
             assertProblem(get("/api/v1/products?category=nope&page=-1"), 400, "VALIDATION_ERROR");
         }
 
@@ -551,8 +541,6 @@ class CatalogApiIntegrationTests {
             default -> throw new IllegalArgumentException(sort);
         };
     }
-
-    // ============================================================================================ product details
 
     @Nested
     @DisplayName("GET /api/v1/products/{slug}")
@@ -643,8 +631,6 @@ class CatalogApiIntegrationTests {
         }
     }
 
-    // ============================================================================================ CORS
-
     @Nested
     @DisplayName("CORS")
     class Cors {
@@ -670,7 +656,6 @@ class CatalogApiIntegrationTests {
 
         @Test
         void localDevOriginFromDefaultProfileIsNotAllowedWhenOverridden() {
-            // Only the configured list counts; the profile default (http://localhost:5173) must not leak in.
             assertThat(get("/api/v1/products", "Origin", "http://localhost:5173").status()).isEqualTo(403);
         }
 
@@ -709,7 +694,6 @@ class CatalogApiIntegrationTests {
         void actualPostFromAllowedOriginIsNotAccepted() {
             Response response = send("POST", "/api/v1/products", "Origin", ALLOWED_ORIGIN);
 
-            // No write endpoint exists; whichever layer answers first, it must not be 2xx nor CORS-approved.
             assertThat(response.status()).isIn(403, 405);
             assertThat(response.header("Access-Control-Allow-Origin")).isNull();
         }
@@ -724,16 +708,10 @@ class CatalogApiIntegrationTests {
         }
     }
 
-    // ============================================================================================ misc routing
-
     @Nested
     @DisplayName("Unknown routes and methods")
     class Routing {
 
-        /**
-         * Documents current behavior only: unknown routes are answered by Spring MVC's NoResourceFoundException
-         * handling in ResponseEntityExceptionHandler -> 404 problem detail. No {@code code} is required.
-         */
         @ParameterizedTest(name = "{0}")
         @ValueSource(strings = {"/api/v1/nope", "/api/v2/products", "/api/v1/products/men-shirt/reviews"})
         void unknownRouteReturns404ProblemDetailWithoutInternals(String path) {
@@ -752,14 +730,12 @@ class CatalogApiIntegrationTests {
             assertThat(response.status()).isEqualTo(405);
             assertThat(response.contentType()).startsWith("application/problem+json");
             assertThat(response.header("Allow")).contains("GET").doesNotContain("DELETE");
-            // product is untouched
             assertThat(get("/api/v1/products/men-shirt").status()).isEqualTo(200);
         }
     }
 
     @Test
     void seedSanity() {
-        // Guards the fixture itself: 7 products stored, 6 of them active.
         assertThat(mongoTemplate.getCollection("products").countDocuments()).isEqualTo(7);
     }
 }

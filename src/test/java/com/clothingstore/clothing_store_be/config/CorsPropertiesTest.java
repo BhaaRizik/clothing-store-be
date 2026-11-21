@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Binding/validation of {@code app.cors.allowed-origins} (FRONTEND_ORIGINS): no wildcard may slip through. */
 class CorsPropertiesTest {
 
     @Configuration(proxyBeanMethods = false)
@@ -22,7 +21,7 @@ class CorsPropertiesTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner().withUserConfiguration(Config.class);
 
     @Test
-    void validCommaSeparatedListBindsWithSpacesTrimmed() {
+    void validCommaSeparatedListBindsWithSpacesTrimmedBySpringConversion() {
         runner.withPropertyValues("app.cors.allowed-origins= http://localhost:5173 , https://shop.example.com:8443,https://www.shop-example.co.il")
                 .run(context -> {
                     assertThat(context).hasNotFailed();

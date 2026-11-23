@@ -1,5 +1,60 @@
 db = db.getSiblingDB('clothing_store');
 
+if (db.promotions.countDocuments({}) === 0) {
+  const promotionCreatedAt = new Date();
+  const promotion = (p) => ({
+    _id: ObjectId(),
+    title: p.title,
+    subtitle: p.subtitle,
+    imageUrl: p.imageUrl,
+    imageAlt: p.imageAlt,
+    ctaLabel: p.ctaLabel,
+    ctaUrl: p.ctaUrl,
+    displayOrder: NumberInt(p.displayOrder),
+    active: p.active,
+    startsAt: null,
+    endsAt: null,
+    createdAt: promotionCreatedAt,
+    updatedAt: promotionCreatedAt,
+  });
+
+  db.promotions.insertMany([
+    promotion({
+      title: 'New season arrivals',
+      subtitle: 'Discover the new collection of coats, knitwear and dresses.',
+      imageUrl: '/images/promotions/new-season.svg',
+      imageAlt: 'Layered coats and knitwear from the new season collection in warm autumn tones',
+      ctaLabel: 'Shop women',
+      ctaUrl: '/categories/women',
+      displayOrder: 1,
+      active: true,
+    }),
+    promotion({
+      title: 'Accessories edit',
+      subtitle: 'Finishing touches for every outfit.',
+      imageUrl: '/images/promotions/accessories-edit.svg',
+      imageAlt: 'Sunglasses, a silk scarf and a leather belt arranged on a soft blue background',
+      ctaLabel: 'Shop accessories',
+      ctaUrl: '/categories/accessories',
+      displayOrder: 2,
+      active: true,
+    }),
+    promotion({
+      title: 'Archived campaign',
+      subtitle: 'A past campaign that is hidden from the storefront.',
+      imageUrl: '/images/promotions/new-season.svg',
+      imageAlt: 'Layered coats and knitwear in warm autumn tones',
+      ctaLabel: null,
+      ctaUrl: null,
+      displayOrder: 3,
+      active: false,
+    }),
+  ]);
+  db.promotions.createIndex({ active: 1, displayOrder: 1 }, { name: 'ix_promotions_active_order' });
+  print(`[seed] promotions seeded: ${db.promotions.countDocuments({})} promotions ` +
+    `(${db.promotions.countDocuments({ active: true })} active).`);
+}
+
 if (db.categories.countDocuments({}) > 0) {
   print('[seed] categories already present - skipping seed (database is not empty).');
   quit(0);

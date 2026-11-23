@@ -50,7 +50,7 @@ class ApplicationProfileConfigurationTest {
         try (ConfigurableApplicationContext context = start(ApplicationPropertiesConfiguration.class, Map.of(),
                 "--spring.profiles.active=local")) {
             Environment environment = context.getEnvironment();
-            assertThat(environment.getProperty("spring.mongodb.uri")).isEqualTo("mongodb://localhost:27018/clothing_store");
+            assertThat(environment.getProperty("spring.mongodb.uri")).isEqualTo("mongodb://localhost:27017/clothing_store");
             assertThat(context.getBean(CorsProperties.class).allowedOrigins()).containsExactly("http://localhost:5173");
             assertThat(context.getBean(StoreProperties.class).currency()).isEqualTo("ILS");
         }
@@ -139,7 +139,7 @@ class ApplicationProfileConfigurationTest {
     void validMongoUriCreatesClientWithoutConnecting() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(MongoAutoConfiguration.class))
-                .withPropertyValues("spring.mongodb.uri=mongodb://localhost:27018/clothing_store")
+                .withPropertyValues("spring.mongodb.uri=mongodb://localhost:27017/clothing_store")
                 .run(context -> assertThat(context).hasNotFailed().hasSingleBean(MongoClient.class));
     }
 }

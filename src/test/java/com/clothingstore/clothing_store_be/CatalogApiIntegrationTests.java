@@ -1,8 +1,8 @@
 package com.clothingstore.clothing_store_be;
 
-import com.clothingstore.clothing_store_be.model.Category;
-import com.clothingstore.clothing_store_be.model.Product;
-import com.clothingstore.clothing_store_be.model.ProductImage;
+import com.clothingstore.clothing_store_be.model.category.Category;
+import com.clothingstore.clothing_store_be.model.product.Product;
+import com.clothingstore.clothing_store_be.model.product.ProductImage;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import org.bson.Document;

@@ -120,6 +120,8 @@ constants/    fixed literals: messages, patterns, sort parameter names
 validation/   Bean Validation constraints that check request values against configured limits
 ```
 
+Inside `controller`, `service`, `repository`, `model`, `dto`, `mapper` and `exception`, classes are grouped in domain sub-packages: `category/`, `product/`, `promotion/`, plus `common/` for shared types (`PageResponse`, `Money`, `ImageResponse`, `FieldErrorResponse`, `MoneyMapper`, `ErrorCode`, `ResourceNotFoundException`, `GlobalExceptionHandler`). Example: `repository/product/ProductRepository`. `config`, `constants` and `validation` stay flat. Tests mirror the same packages.
+
 Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for logging; MapStruct for all mapping; DTOs and documents hold fields only; tunables come from `application.yaml`; no comments in source code.
 
 ## API (v1, public, read-only)

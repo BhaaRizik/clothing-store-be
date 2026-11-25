@@ -8,6 +8,7 @@ import com.clothingstore.clothing_store_be.mapper.category.CategoryMapper;
 import com.clothingstore.clothing_store_be.mapper.common.MoneyMapper;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.model.product.Product;
+import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import org.mapstruct.Context;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
@@ -19,7 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Mapper(componentModel = "spring", injectionStrategy = InjectionStrategy.CONSTRUCTOR,
-        uses = {MoneyMapper.class, ProductImageMapper.class, CategoryMapper.class})
+        uses = {MoneyMapper.class, ProductImageMapper.class, CategoryMapper.class, ProductVariantMapper.class})
 public interface ProductMapper {
 
     @Mapping(target = "price", source = "basePrice")
@@ -35,7 +36,8 @@ public interface ProductMapper {
     @Mapping(target = "price", source = "product.basePrice")
     @Mapping(target = "salePrice", source = "product.salePrice")
     @Mapping(target = "category", source = "category")
-    ProductDetailsResponse toProductDetailsResponse(Product product, Category category,
+    @Mapping(target = "variants", source = "variants")
+    ProductDetailsResponse toProductDetailsResponse(Product product, Category category, List<ProductVariant> variants,
             @Context StoreProperties storeProperties);
 
     @Mapping(target = "items", source = ".", qualifiedByName = "toProductCardItems")

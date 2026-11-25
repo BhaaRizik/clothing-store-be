@@ -1,6 +1,7 @@
 package com.clothingstore.clothing_store_be.mapper.product;
 
 import com.clothingstore.clothing_store_be.dto.common.ImageResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductImageResponse;
 import com.clothingstore.clothing_store_be.model.product.ProductImage;
 import org.junit.jupiter.api.Test;
 
@@ -12,21 +13,28 @@ class ProductImageMapperTest {
 
     private final ProductImageMapper productImageMapper = new ProductImageMapperImpl();
 
-    private final List<ProductImage> images = List.of(new ProductImage("u1", "Front"), new ProductImage("u2", "Back"));
+    private final List<ProductImage> images = List.of(new ProductImage("u1", "Front", "White"),
+            new ProductImage("u2", "Back", null));
 
     @Test
-    void mapsAllImagesInOrder() {
-        assertThat(productImageMapper.toImageResponses(images))
-                .containsExactly(new ImageResponse("u1", "Front"), new ImageResponse("u2", "Back"));
+    void mapsAllImagesInOrderWithColorTags() {
+        assertThat(productImageMapper.toProductImageResponses(images)).containsExactly(
+                new ProductImageResponse("u1", "Front", "White"), new ProductImageResponse("u2", "Back", null));
+    }
+
+    @Test
+    void untaggedImageHasNullColor() {
+        assertThat(productImageMapper.toProductImageResponse(new ProductImage("u3", null, null)))
+                .isEqualTo(new ProductImageResponse("u3", null, null));
     }
 
     @Test
     void nullImagesMapToEmptyList() {
-        assertThat(productImageMapper.toImageResponses(null)).isEmpty();
+        assertThat(productImageMapper.toProductImageResponses(null)).isNotNull().isEmpty();
     }
 
     @Test
-    void primaryImageIsTheFirstImage() {
+    void primaryImageIsTheFirstImageWithoutColor() {
         assertThat(productImageMapper.toPrimaryImageResponse(images)).isEqualTo(new ImageResponse("u1", "Front"));
     }
 

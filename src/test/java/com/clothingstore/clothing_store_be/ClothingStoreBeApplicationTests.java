@@ -86,4 +86,20 @@ class ClothingStoreBeApplicationTests {
 		assertThat(count).isEqualTo(18);
 	}
 
+	@Test
+	void colorTaggedCatalogImagesReferencedBySeedScriptAreServedAsSvg() throws Exception {
+		String seed = Files.readString(Path.of("docker/mongo-init/seed.js"));
+		Matcher calls = Pattern.compile("colorImage\\('([a-z0-9-]+)', '([^']+)', '([^']+)'\\)").matcher(seed);
+		int count = 0;
+		while (calls.find()) {
+			String file = calls.group(1) + "-" + calls.group(2).toLowerCase().replace(' ', '-') + ".svg";
+			assertThat(calls.group(3)).containsIgnoringCase(calls.group(2));
+			mockMvc.perform(get("/images/catalog/" + file))
+					.andExpect(status().isOk())
+					.andExpect(content().contentTypeCompatibleWith("image/svg+xml"));
+			count++;
+		}
+		assertThat(count).isEqualTo(14);
+	}
+
 }

@@ -1,6 +1,7 @@
 package com.clothingstore.clothing_store_be.mapper.product;
 
 import com.clothingstore.clothing_store_be.dto.common.ImageResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductImageResponse;
 import com.clothingstore.clothing_store_be.model.product.ProductImage;
 import org.mapstruct.Mapper;
 import org.mapstruct.Named;
@@ -13,11 +14,13 @@ public interface ProductImageMapper {
 
     ImageResponse toImageResponse(ProductImage productImage);
 
-    default List<ImageResponse> toImageResponses(List<ProductImage> productImages) {
+    ProductImageResponse toProductImageResponse(ProductImage productImage);
+
+    default List<ProductImageResponse> toProductImageResponses(List<ProductImage> productImages) {
         return Optional.ofNullable(productImages)
                 .orElseGet(List::of)
                 .stream()
-                .map(this::toImageResponse)
+                .map(this::toProductImageResponse)
                 .toList();
     }
 

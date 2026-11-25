@@ -68,7 +68,8 @@ Values above a maximum return `400 VALIDATION_ERROR` with, for example, `errors:
 - Local connection string: `mongodb://localhost:27017/clothing_store`. The `local` profile uses it. It uses the MongoDB default port, so stop any native `mongod` on 27017 first.
 - Sample data comes from `docker/mongo-init/seed.js`. It loads **only on the first start with an empty volume**. To re-seed, run `docker compose down -v && docker compose up -d`. Note that `-v` deletes all local data.
 - The seed also adds sample homepage promotions to the `promotions` collection when it is empty. Their banner images are served at `/images/promotions/<name>.svg`.
-- Sample product and category images are SVG illustrations served by the backend at `/images/catalog/<slug>.svg` (files in `src/main/resources/static/images/catalog/`). The seed stores them as root-relative URLs, which the frontend resolves against `VITE_API_BASE_URL`. Regenerate them with `python3 scripts/generate_catalog_images.py src/main/resources/static/images/catalog /tmp/catalog-sheet.svg`.
+- The seed tags product images by color when they are not tagged yet, and adds product variants (sizes, colors, stock) to the `product_variants` collection whenever that collection is empty, **even if categories and products already exist**. To add variants to an existing local database without wiping it, run `docker compose exec mongo mongosh --quiet /docker-entrypoint-initdb.d/seed.js`; the catalog and promotion blocks skip themselves when their data is present.
+- Sample product and category images are SVG illustrations served by the backend at `/images/catalog/<slug>.svg` (files in `src/main/resources/static/images/catalog/`). The seed stores them as root-relative URLs, which the frontend resolves against `VITE_API_BASE_URL`. Regenerate them with `python3 scripts/generate_catalog_images.py src/main/resources/static/images/catalog /tmp/catalog-sheet.svg`. The script also writes one `<slug>-<color-slug>.svg` per color for the color-tagged products (see `COLOR_ITEMS` in the script).
 - The container has no authentication and binds only to 127.0.0.1, so use it for local development only. Deployed environments use MongoDB Atlas via `MONGODB_URI`.
 
 ### Start the API
@@ -111,7 +112,7 @@ ClothingStoreBeApplication.java   entry point, logs the startup message
 controller/   REST controllers (HTTP only)
 service/      business logic
 repository/   Spring Data repositories and the @Repository custom fragment
-model/        MongoDB documents (Category, Product, Promotion) and the ProductSort option
+model/        MongoDB documents (Category, Product, ProductVariant, Promotion) and the ProductSort option
 dto/          response records, one top-level type per file
 mapper/       MapStruct mappers for every document-to-DTO conversion, money formatting and page envelopes
 exception/    exceptions, error codes and the global ProblemDetail handler
@@ -131,10 +132,50 @@ Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for lo
 | `GET /api/v1/categories` | Active categories, sorted by `displayOrder` and then `name` |
 | `GET /api/v1/categories/{slug}` | One active category. Returns 404 `CATEGORY_NOT_FOUND` if missing. |
 | `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. |
-| `GET /api/v1/products/{slug}` | Details of one active product. Returns 404 `PRODUCT_NOT_FOUND` if missing. |
+| `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing. |
 | `GET /api/v1/promotions` | Homepage promotions that are live right now, sorted by `displayOrder` and then `title`. Always returns 200 with a JSON array, which is `[]` when there are none. |
 
 Money is returned as `{ "amount": "49.90", "currency": "ILS" }`. Errors use RFC 9457 problem details (`application/problem+json`) with a stable `code` (`CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `VALIDATION_ERROR`, `INTERNAL_ERROR`). Validation errors also include `errors: [{ field, message }]`.
+
+### Product details and variants
+
+`GET /api/v1/products/{slug}` returns the product details followed by a `variants` array (never null, `[]` when the product has no active variants):
+
+```json
+{ "id": "...", "slug": "men-classic-oxford-shirt", "name": "...", "description": "...", "brand": "...", "images": [ { "url": "/images/catalog/men-classic-oxford-shirt-light-blue.svg", "alt": "Light blue Oxford shirt on a hanger", "color": "Light blue" } ], "price": { "amount": "49.90", "currency": "ILS" }, "salePrice": null, "category": { "slug": "men", "name": "Men" },
+  "variants": [ { "id": "...", "size": "S", "color": { "name": "Light blue", "hexCode": "#9DB9D8" }, "available": true } ] }
+```
+
+- Only variants with `active: true` are returned, ordered by `displayOrder` ascending and then `_id`.
+- `size` is null for products without sizes (for example sunglasses). `color` is null for products without colors, and `color.hexCode` is null when a color has no single swatch (for example "Floral print").
+- Availability rule: `available` is `true` only when `stockQuantity > 0`. The stock count itself, the `sku`, `active` and `displayOrder` are never exposed by the API.
+- The response carries `Cache-Control: no-store` so browsers and proxies never show stale availability.
+
+Product images and colors:
+
+- Each item in the details `images` array is `{ url, alt, color }`. `color` is null for untagged images; otherwise it equals, as an exact string, the `color.name` of one of the product's variants. Images keep their stored order, and the first image is the product's default image.
+- In MongoDB, `products.images[]` items are `{ url, alt, color }`, and `color` is optional. Documents written before color tagging have no `color` field, which maps to null.
+- Product cards (`GET /api/v1/products`) are unchanged: `primaryImage` is `{ url, alt }`, built from the first image, with no `color`.
+- Gallery rule for the frontend: when a color is selected, show that color's images plus the untagged images. If no image is tagged with the selected color, show all images.
+- The seed tags the images of the seven two-color products that have artwork (`men-classic-oxford-shirt`, `men-slim-chino-trousers`, `women-cable-knit-sweater`, `women-ribbed-tank-top`, `shoes-running-trainers`, `acc-wool-beanie`, `acc-classic-sunglasses`), using one image per color at `/images/catalog/<slug>-<color-slug>.svg`. The first image is the color that comes first in the variants' `displayOrder`. On an existing database, the seed sets these images only for products that have no color-tagged image yet, so running it again changes nothing.
+
+Variants live in the `product_variants` collection:
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | ObjectId | returned as `id` |
+| `productId` | ObjectId | references `products._id` |
+| `sku` | string | unique, for example `MEN-OXF-BLU-M`; not returned |
+| `size` | string or null | for example `S`..`XXL` for apparel, `40`..`45` for shoes |
+| `color` | object or null | `{ name, hexCode }`, `hexCode` may be null |
+| `stockQuantity` | int | not returned; drives `available` |
+| `active` | bool | `false` hides the variant |
+| `displayOrder` | int | ascending sort key; the seed uses `sizeIndex * 10 + colorIndex` so sizes list in size order |
+| `createdAt`, `updatedAt` | date | not returned by the API |
+
+Indexes: `uk_product_variants_sku` (unique) on `{ sku: 1 }` and `ix_product_variants_product_active_order` on `{ productId: 1, active: 1, displayOrder: 1 }`.
+
+Seed data notes: apparel uses sizes S, M, L, XL, XXL with one or two colors and some undefined size/color combinations; shoes use EU sizes 40 to 45; `shoes-canvas-slip-ons` has every variant out of stock; `MEN-CHN-NVY-XXL` is an inactive variant; `acc-classic-sunglasses` and `acc-wool-beanie` are color-only; `acc-leather-belt` is size-only (S, M, L with no color); `acc-silk-scarf` and `acc-canvas-tote-bag` have a single variant with no size and no color.
 
 ### Promotions
 

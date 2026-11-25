@@ -6,12 +6,17 @@ import com.clothingstore.clothing_store_be.dto.common.ImageResponse;
 import com.clothingstore.clothing_store_be.dto.common.Money;
 import com.clothingstore.clothing_store_be.dto.common.PageResponse;
 import com.clothingstore.clothing_store_be.dto.product.ProductCardResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductColorResponse;
 import com.clothingstore.clothing_store_be.dto.product.ProductDetailsResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductImageResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductVariantResponse;
 import com.clothingstore.clothing_store_be.mapper.category.CategoryMapperImpl;
 import com.clothingstore.clothing_store_be.mapper.common.MoneyMapperImpl;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.model.product.Product;
+import com.clothingstore.clothing_store_be.model.product.ProductColor;
 import com.clothingstore.clothing_store_be.model.product.ProductImage;
+import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -28,7 +33,7 @@ import static org.mockito.Mockito.when;
 class ProductMapperTest {
 
     private final ProductMapper productMapper = new ProductMapperImpl(new MoneyMapperImpl(), new ProductImageMapperImpl(),
-            new CategoryMapperImpl());
+            new CategoryMapperImpl(), new ProductVariantMapperImpl());
     private final StoreProperties storeProperties = new StoreProperties("ILS");
     private final Category men = new Category("cat-1", "men", "Men", "Desc", null, null, 1, true, Instant.EPOCH, Instant.EPOCH);
 
@@ -40,11 +45,19 @@ class ProductMapperTest {
 
     @Test
     void mapsProductCardWithFirstImageAndFormattedPrices() {
-        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1"), new ProductImage("u2", "a2")), "39.9");
+        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1", null), new ProductImage("u2", "a2", null)), "39.9");
 
         assertThat(productMapper.toProductCardResponse(shirt, storeProperties)).isEqualTo(new ProductCardResponse(
                 "id-shirt", "shirt", "Name shirt", new ImageResponse("u1", "a1"),
                 new Money("49.90", "ILS"), new Money("39.90", "ILS")));
+    }
+
+    @Test
+    void productCardPrimaryImageIgnoresColorTag() {
+        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1", "White")), null);
+
+        assertThat(productMapper.toProductCardResponse(shirt, storeProperties).primaryImage())
+                .isEqualTo(new ImageResponse("u1", "a1"));
     }
 
     @Test
@@ -57,20 +70,44 @@ class ProductMapperTest {
 
     @Test
     void mapsProductDetailsWithAllImagesAndCategoryReference() {
-        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1"), new ProductImage("u2", "a2")), null);
+        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1", "Blue"), new ProductImage("u2", "a2", null)), null);
 
-        assertThat(productMapper.toProductDetailsResponse(shirt, men, storeProperties)).isEqualTo(new ProductDetailsResponse(
-                "id-shirt", "shirt", "Name shirt", "Description shirt", "Acme",
-                List.of(new ImageResponse("u1", "a1"), new ImageResponse("u2", "a2")),
-                new Money("49.90", "ILS"), null, new CategoryReferenceResponse("men", "Men")));
+        assertThat(productMapper.toProductDetailsResponse(shirt, men, List.of(), storeProperties))
+                .isEqualTo(new ProductDetailsResponse(
+                        "id-shirt", "shirt", "Name shirt", "Description shirt", "Acme",
+                        List.of(new ProductImageResponse("u1", "a1", "Blue"), new ProductImageResponse("u2", "a2", null)),
+                        new Money("49.90", "ILS"), null, new CategoryReferenceResponse("men", "Men"), List.of()));
     }
 
     @Test
     void productDetailsWithNullImagesHasEmptyImageList() {
         ProductDetailsResponse details = productMapper.toProductDetailsResponse(product("coat", null, null), men,
-                storeProperties);
+                List.of(), storeProperties);
 
         assertThat(details.images()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void productDetailsIncludeVariantsInGivenOrder() {
+        List<ProductVariant> variants = List.of(
+                new ProductVariant("v1", "id-shirt", "SKU-S", "S", new ProductColor("Blue", "#1E3A8A"), 3, true, 10,
+                        Instant.EPOCH, Instant.EPOCH),
+                new ProductVariant("v2", "id-shirt", "SKU-M", "M", null, 0, true, 20, Instant.EPOCH, Instant.EPOCH));
+
+        ProductDetailsResponse details = productMapper.toProductDetailsResponse(product("shirt", List.of(), null), men,
+                variants, storeProperties);
+
+        assertThat(details.variants()).containsExactly(
+                new ProductVariantResponse("v1", "S", new ProductColorResponse("Blue", "#1E3A8A"), true),
+                new ProductVariantResponse("v2", "M", null, false));
+    }
+
+    @Test
+    void productDetailsWithNullVariantsHaveEmptyVariantList() {
+        ProductDetailsResponse details = productMapper.toProductDetailsResponse(product("coat", null, null), men,
+                null, storeProperties);
+
+        assertThat(details.variants()).isNotNull().isEmpty();
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.clothingstore.clothing_store_be.validation.MaxConfiguredPage;
 import com.clothingstore.clothing_store_be.validation.MaxConfiguredPageSize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,7 +19,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -63,11 +67,15 @@ public class ProductController {
     }
 
     @GetMapping("/{slug}")
-    @Operation(summary = "Get active product details by slug")
-    @ApiResponse(responseCode = "200", description = "Product found")
+    @Operation(summary = "Get active product details by slug",
+            description = "Includes the active variants ordered by displayOrder; available is true when the variant "
+                    + "is in stock, stock counts are never exposed. Responds with Cache-Control: no-store.")
+    @ApiResponse(responseCode = "200", description = "Product found, with variants (empty array when none)",
+            headers = @Header(name = HttpHeaders.CACHE_CONTROL, description = "no-store",
+                    schema = @Schema(type = "string")))
     @ApiResponse(responseCode = "404", description = "PRODUCT_NOT_FOUND: missing or inactive",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    public ProductDetailsResponse getProduct(@PathVariable String slug) {
-        return productService.getProduct(slug);
+    public ResponseEntity<ProductDetailsResponse> getProduct(@PathVariable String slug) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(productService.getProduct(slug));
     }
 }

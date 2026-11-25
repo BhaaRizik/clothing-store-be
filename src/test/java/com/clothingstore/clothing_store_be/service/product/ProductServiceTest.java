@@ -6,18 +6,25 @@ import com.clothingstore.clothing_store_be.dto.common.ImageResponse;
 import com.clothingstore.clothing_store_be.dto.common.Money;
 import com.clothingstore.clothing_store_be.dto.common.PageResponse;
 import com.clothingstore.clothing_store_be.dto.product.ProductCardResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductColorResponse;
 import com.clothingstore.clothing_store_be.dto.product.ProductDetailsResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductImageResponse;
+import com.clothingstore.clothing_store_be.dto.product.ProductVariantResponse;
 import com.clothingstore.clothing_store_be.exception.category.CategoryNotFoundException;
 import com.clothingstore.clothing_store_be.exception.product.ProductNotFoundException;
 import com.clothingstore.clothing_store_be.mapper.category.CategoryMapperImpl;
 import com.clothingstore.clothing_store_be.mapper.common.MoneyMapperImpl;
 import com.clothingstore.clothing_store_be.mapper.product.ProductImageMapperImpl;
 import com.clothingstore.clothing_store_be.mapper.product.ProductMapperImpl;
+import com.clothingstore.clothing_store_be.mapper.product.ProductVariantMapperImpl;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.model.product.Product;
+import com.clothingstore.clothing_store_be.model.product.ProductColor;
 import com.clothingstore.clothing_store_be.model.product.ProductImage;
 import com.clothingstore.clothing_store_be.model.product.ProductSort;
+import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import com.clothingstore.clothing_store_be.repository.product.ProductRepository;
+import com.clothingstore.clothing_store_be.repository.product.ProductVariantRepository;
 import com.clothingstore.clothing_store_be.service.category.CategoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +58,8 @@ class ProductServiceTest {
     @Mock
     private ProductRepository productRepository;
     @Mock
+    private ProductVariantRepository productVariantRepository;
+    @Mock
     private CategoryService categoryService;
 
     private ProductService productService;
@@ -58,8 +67,9 @@ class ProductServiceTest {
     @BeforeEach
     void createService() {
         ProductMapperImpl productMapper = new ProductMapperImpl(new MoneyMapperImpl(), new ProductImageMapperImpl(),
-                new CategoryMapperImpl());
-        productService = new ProductService(productRepository, categoryService, productMapper, new StoreProperties("ILS"));
+                new CategoryMapperImpl(), new ProductVariantMapperImpl());
+        productService = new ProductService(productRepository, productVariantRepository, categoryService, productMapper,
+                new StoreProperties("ILS"));
     }
 
     static Product product(String slug, List<ProductImage> images, String basePrice, String salePrice) {
@@ -70,7 +80,7 @@ class ProductServiceTest {
 
     @Test
     void listMapsCardsWithFirstImageAndFormattedPrices() {
-        Product withImages = product("shirt", List.of(new ProductImage("u1", "a1"), new ProductImage("u2", "a2")), "49.9", "39.90");
+        Product withImages = product("shirt", List.of(new ProductImage("u1", "a1", null), new ProductImage("u2", "a2", null)), "49.9", "39.90");
         Product withoutImages = product("tee", List.of(), "19.90", null);
         when(productRepository.findActiveProductsByFilters(eq(Optional.empty()), eq(Optional.empty()), any()))
                 .thenAnswer(invocation -> new PageImpl<>(List.of(withImages, withoutImages), invocation.getArgument(2), 2));
@@ -131,18 +141,38 @@ class ProductServiceTest {
 
     @Test
     void getProductReturnsDetailsWithCategoryReference() {
-        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1")), "49.90", null);
+        Product shirt = product("shirt", List.of(new ProductImage("u1", "a1", null)), "49.90", null);
         when(productRepository.findBySlugAndActiveTrue("shirt")).thenReturn(Optional.of(shirt));
         when(categoryService.findCategoryById("cat-1")).thenReturn(Optional.of(
                 new Category("cat-1", "men", "Men", null, null, null, 1, true, Instant.EPOCH, Instant.EPOCH)));
 
         ProductDetailsResponse details = productService.getProduct("shirt");
 
-        assertThat(details.images()).containsExactly(new ImageResponse("u1", "a1"));
+        assertThat(details.images()).containsExactly(new ProductImageResponse("u1", "a1", null));
         assertThat(details.price()).isEqualTo(new Money("49.90", "ILS"));
         assertThat(details.salePrice()).isNull();
         assertThat(details.brand()).isNull();
         assertThat(details.category()).isEqualTo(new CategoryReferenceResponse("men", "Men"));
+        assertThat(details.variants()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void getProductReturnsActiveVariantsFromRepositoryInOrder() {
+        Product shirt = product("shirt", List.of(), "49.90", null);
+        when(productRepository.findBySlugAndActiveTrue("shirt")).thenReturn(Optional.of(shirt));
+        when(categoryService.findCategoryById("cat-1")).thenReturn(Optional.of(
+                new Category("cat-1", "men", "Men", null, null, null, 1, true, Instant.EPOCH, Instant.EPOCH)));
+        when(productVariantRepository.findByProductIdAndActiveTrueOrderByDisplayOrderAscIdAsc("id-shirt")).thenReturn(List.of(
+                new ProductVariant("v-s", "id-shirt", "SHIRT-S", "S", new ProductColor("Blue", "#1E3A8A"), 0, true, 10,
+                        Instant.EPOCH, Instant.EPOCH),
+                new ProductVariant("v-m", "id-shirt", "SHIRT-M", "M", null, 7, true, 20, Instant.EPOCH, Instant.EPOCH)));
+
+        ProductDetailsResponse details = productService.getProduct("shirt");
+
+        assertThat(details.variants()).containsExactly(
+                new ProductVariantResponse("v-s", "S", new ProductColorResponse("Blue", "#1E3A8A"), false),
+                new ProductVariantResponse("v-m", "M", null, true));
+        verify(productVariantRepository).findByProductIdAndActiveTrueOrderByDisplayOrderAscIdAsc("id-shirt");
     }
 
     @Test
@@ -161,5 +191,6 @@ class ProductServiceTest {
         when(productRepository.findBySlugAndActiveTrue("gone")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> productService.getProduct("gone")).isInstanceOf(ProductNotFoundException.class);
+        verifyNoInteractions(productVariantRepository);
     }
 }

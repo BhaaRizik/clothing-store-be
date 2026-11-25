@@ -20,16 +20,15 @@ def ol(stroke):
     return f'stroke="{stroke}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"'
 
 
-def oxford_shirt(p):
-    f, s = '#A9C8E8', '#5F86AD'
-    buttons = ''.join(f'<circle cx="300" cy="{y}" r="6" fill="#F4F8FC" stroke="{s}" stroke-width="2"/>' for y in (335, 395, 455, 515, 575, 630))
+def oxford_shirt(p, f='#A9C8E8', s='#5F86AD', collar='#BFD6EE', button='#F4F8FC'):
+    buttons = ''.join(f'<circle cx="300" cy="{y}" r="6" fill="{button}" stroke="{s}" stroke-width="2"/>' for y in (335, 395, 455, 515, 575, 630))
     return (
         hanger(5) + shadow(rx=150) +
         f'<path d="M245 222 L180 245 L125 320 L100 600 L152 607 L180 400 L180 660 L420 660 L420 400 L448 607 L500 600 L475 320 L420 245 L355 222 Z" fill="{f}" {ol(s)}/>'
         f'<path d="M103 568 L154 575 M497 568 L446 575" stroke="{s}" stroke-width="3"/>'
         f'<rect x="205" y="330" width="62" height="68" rx="5" fill="none" stroke="{s}" stroke-width="3"/>'
         f'<path d="M300 292 V660" stroke="{s}" stroke-width="3"/>'
-        f'<path d="M245 222 L300 292 L268 305 L232 242 Z M355 222 L300 292 L332 305 L368 242 Z" fill="#BFD6EE" {ol(s)}/>'
+        f'<path d="M245 222 L300 292 L268 305 L232 242 Z M355 222 L300 292 L332 305 L368 242 Z" fill="{collar}" {ol(s)}/>'
         f'<circle cx="262" cy="294" r="4" fill="{s}"/><circle cx="338" cy="294" r="4" fill="{s}"/>' + buttons
     )
 
@@ -136,8 +135,7 @@ def floral_dress(p):
     )
 
 
-def cable_sweater(p):
-    f, s, d = '#EFE6D2', '#B3A47F', '#D9CCAE'
+def cable_sweater(p, f='#EFE6D2', s='#B3A47F', d='#D9CCAE'):
     def cable(x):
         segs = ''.join(f' C{x + 18} {y + 15} {x + 18} {y + 35} {x} {y + 50}' for y in range(260, 580, 50))
         segs2 = ''.join(f' C{x - 18} {y + 15} {x - 18} {y + 35} {x} {y + 50}' for y in range(260, 580, 50))
@@ -154,10 +152,9 @@ def cable_sweater(p):
     )
 
 
-def tank_top(p):
-    f, s = '#FFFFFF', '#9AA2AC'
+def tank_top(p, f='#FFFFFF', s='#9AA2AC', rib='#E3E7EC'):
     cid = f'{p}tank'
-    ribs = ''.join(f'<path d="M{x} 160 V640" stroke="#E3E7EC" stroke-width="3"/>' for x in range(196, 410, 13))
+    ribs = ''.join(f'<path d="M{x} 160 V640" stroke="{rib}" stroke-width="3"/>' for x in range(196, 410, 13))
     shape = 'M226 168 L258 168 Q300 280 342 168 L374 168 Q376 262 402 302 L406 630 L194 630 L198 302 Q224 262 226 168 Z'
     return (
         shadow(cy=655, rx=130) +
@@ -187,18 +184,17 @@ def sneakers(p):
             _shoe(-10, 20, '#FDFDFD', s, '#EEF0F2', extra))
 
 
-def running_trainers(p):
-    s = '#5F666E'
-    mesh = ''.join(f'<circle cx="{x}" cy="{y}" r="2.6" fill="#7E858D"/>' for x in range(200, 330, 16) for y in range(440, 510, 16))
+def running_trainers(p, upper='#9EA5AD', upper_back='#B4BAC1', s='#5F666E', dots='#7E858D'):
+    mesh = ''.join(f'<circle cx="{x}" cy="{y}" r="2.6" fill="{dots}"/>' for x in range(200, 330, 16) for y in range(440, 510, 16))
     laces = ''.join(f'<path d="M{262 + i * 18} {398 + i * 11} L{248 + i * 18} {420 + i * 11}" stroke="#F4F5F6" stroke-width="4"/>' for i in range(5))
     extra = (mesh + laces +
              f'<path d="M152 425 Q170 470 160 520 L150 520 Z" fill="#F26B5B" {ol(s)}/>'
              f'<path d="M300 505 Q360 470 440 495" fill="none" stroke="#F26B5B" stroke-width="8" stroke-linecap="round"/>'
              f'<path d="M140 545 Q300 556 490 545" fill="none" stroke="#D5D9DE" stroke-width="3"/>')
     return (shadow(cy=612, rx=210) +
-            _shoe(50, -70, '#B4BAC1', s, '#FAFAFA', extra, scale=0.92) +
+            _shoe(50, -70, upper_back, s, '#FAFAFA', extra, scale=0.92) +
             f'<g transform="translate(-10,14)"><rect x="140" y="534" width="350" height="44" rx="18" fill="#FAFAFA" {ol(s)}/></g>' +
-            _shoe(-10, 20, '#9EA5AD', s, '#FAFAFA', extra))
+            _shoe(-10, 20, upper, s, '#FAFAFA', extra))
 
 
 def slip_ons(p):
@@ -248,8 +244,7 @@ def leather_belt(p):
     )
 
 
-def beanie(p):
-    f, s, d = '#8E949C', '#5E636A', '#7D838B'
+def beanie(p, f='#8E949C', s='#5E636A', d='#7D838B'):
     ribs_dome = ''.join(f'<path d="M{x} 470 Q{300 + (x - 300) * 0.55:.0f} 300 300 232" fill="none" stroke="{d}" stroke-width="3"/>' for x in range(190, 420, 22))
     ribs_cuff = ''.join(f'<path d="M{x} 470 V575" stroke="{d}" stroke-width="5"/>' for x in range(178, 425, 14))
     return (
@@ -280,8 +275,7 @@ def silk_scarf(p):
     )
 
 
-def sunglasses(p):
-    fr = '#1F1F23'
+def sunglasses(p, fr='#1F1F23', spots=None):
     gid = f'{p}lens'
     return (
         shadow(cy=520, rx=200) +
@@ -291,6 +285,10 @@ def sunglasses(p):
         f'<rect x="320" y="340" width="160" height="120" rx="44" fill="url(#{gid})" stroke="{fr}" stroke-width="14"/>'
         f'<path d="M280 372 Q300 352 320 372" fill="none" stroke="{fr}" stroke-width="12"/>'
         f'<path d="M150 362 L182 362 M350 362 L382 362" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.45"/>'
+        + (''.join(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{spots}"/>' for x, y, r in (
+            (150, 340, 4), (196, 341, 5), (246, 339, 3), (126, 400, 4), (170, 460, 5), (232, 461, 4),
+            (352, 340, 5), (404, 339, 3), (452, 341, 4), (474, 402, 5), (380, 460, 4), (440, 461, 3),
+            (300, 362, 4))) if spots else '')
     )
 
 
@@ -314,6 +312,44 @@ ITEMS = {
     'acc-silk-scarf': (silk_scarf, '#F6F1E8', 'Printed silk scarf folded'),
     'acc-classic-sunglasses': (sunglasses, '#EFEDEA', 'Black acetate sunglasses'),
 }
+
+
+COLOR_ITEMS = {
+    'men-classic-oxford-shirt': (oxford_shirt, '#EEF3F8', [
+        ('Light blue', 'Light blue Oxford shirt on a hanger', {}),
+        ('White', 'White Oxford shirt on a hanger',
+         {'f': '#FAFBFC', 's': '#7D8793', 'collar': '#EEF1F4', 'button': '#DDE2E8'}),
+    ]),
+    'men-slim-chino-trousers': (chinos, '#F5F1EA', [
+        ('Beige', 'Beige slim chino trousers', {}),
+        ('Navy', 'Navy slim chino trousers', {'f': '#2B3A5C', 's': '#141D33'}),
+    ]),
+    'women-cable-knit-sweater': (cable_sweater, '#F2EFEA', [
+        ('Cream', 'Cream cable knit sweater', {}),
+        ('Grey', 'Grey cable knit sweater', {'f': '#9EA3A8', 's': '#5F656B', 'd': '#868B91'}),
+    ]),
+    'women-ribbed-tank-top': (tank_top, '#E9EDF2', [
+        ('White', 'White ribbed tank top', {}),
+        ('Black', 'Black ribbed tank top', {'f': '#1E1F22', 's': '#000000', 'rib': '#3A3C40'}),
+    ]),
+    'shoes-running-trainers': (running_trainers, '#EEF0F3', [
+        ('Grey', 'Grey running trainers', {}),
+        ('Black', 'Black running trainers',
+         {'upper': '#2A2C30', 'upper_back': '#3A3D42', 's': '#111214', 'dots': '#55595F'}),
+    ]),
+    'acc-wool-beanie': (beanie, '#EFF0F2', [
+        ('Grey', 'Grey ribbed wool beanie', {}),
+        ('Navy', 'Navy ribbed wool beanie', {'f': '#2B3A5C', 's': '#141D33', 'd': '#22304D'}),
+    ]),
+    'acc-classic-sunglasses': (sunglasses, '#EFEDEA', [
+        ('Black', 'Black acetate sunglasses', {}),
+        ('Tortoiseshell', 'Tortoiseshell acetate sunglasses', {'fr': '#8B5A2B', 'spots': '#3E2410'}),
+    ]),
+}
+
+
+def color_slug(color_name):
+    return color_name.lower().replace(' ', '-')
 
 
 def compose(parts, prefix):
@@ -345,6 +381,13 @@ def main(out_dir, sheet_path):
         with open(os.path.join(out_dir, f'{slug}.svg'), 'w') as fh:
             fh.write(svg(title, bg, body))
         cells.append((bg, body))
+    for slug, (fn, bg, colors) in COLOR_ITEMS.items():
+        for color_name, title, palette in colors:
+            file_slug = f'{slug}-{color_slug(color_name)}'
+            body = fn(file_slug + '-', **palette)
+            with open(os.path.join(out_dir, f'{file_slug}.svg'), 'w') as fh:
+                fh.write(svg(title, bg, body))
+            cells.append((bg, body))
     for slug, (bg, title, parts) in CATEGORIES.items():
         body = compose(parts, slug + '-')
         with open(os.path.join(out_dir, f'{slug}.svg'), 'w') as fh:

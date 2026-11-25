@@ -10,12 +10,15 @@ import com.clothingstore.clothing_store_be.mapper.product.ProductMapper;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.model.product.Product;
 import com.clothingstore.clothing_store_be.model.product.ProductSort;
+import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import com.clothingstore.clothing_store_be.repository.product.ProductRepository;
+import com.clothingstore.clothing_store_be.repository.product.ProductVariantRepository;
 import com.clothingstore.clothing_store_be.service.category.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -23,6 +26,7 @@ import java.util.Optional;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final CategoryService categoryService;
     private final ProductMapper productMapper;
     private final StoreProperties storeProperties;
@@ -42,6 +46,8 @@ public class ProductService {
         Category category = categoryService.findCategoryById(product.categoryId())
                 .orElseThrow(() -> new IllegalStateException(
                         ErrorMessages.MISSING_PRODUCT_CATEGORY_FORMAT.formatted(product.id())));
-        return productMapper.toProductDetailsResponse(product, category, storeProperties);
+        List<ProductVariant> variants = productVariantRepository
+                .findByProductIdAndActiveTrueOrderByDisplayOrderAscIdAsc(product.id());
+        return productMapper.toProductDetailsResponse(product, category, variants, storeProperties);
     }
 }

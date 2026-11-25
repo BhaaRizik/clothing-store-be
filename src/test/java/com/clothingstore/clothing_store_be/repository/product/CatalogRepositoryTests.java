@@ -86,9 +86,19 @@ class CatalogRepositoryTests {
         assertThat(shirt.basePrice()).isEqualByComparingTo(new BigDecimal("49.90"));
         assertThat(shirt.salePrice()).isEqualByComparingTo(new BigDecimal("39.90"));
         assertThat(shirt.categoryId()).isEqualTo(menId.toHexString());
-        assertThat(shirt.images()).containsExactly(new ProductImage("http://img/1", "Front"));
+        assertThat(shirt.images()).containsExactly(new ProductImage("http://img/1", "Front", null));
         assertThat(shirt.brand()).isNull();
         assertThat(productRepository.findBySlugAndActiveTrue("men-coat").orElseThrow().salePrice()).isNull();
+    }
+
+    @Test
+    void readsColorTaggedImagesAlongsideLegacyUntaggedImages() {
+        mongoTemplate.getCollection("products").insertOne(product("men-tagged", menId, "29.90", null, true, false, 3,
+                List.of(new Document("url", "http://img/white").append("alt", "White").append("color", "White"),
+                        new Document("url", "http://img/detail").append("alt", "Detail"))));
+
+        assertThat(productRepository.findBySlugAndActiveTrue("men-tagged").orElseThrow().images()).containsExactly(
+                new ProductImage("http://img/white", "White", "White"), new ProductImage("http://img/detail", "Detail", null));
     }
 
     @Test

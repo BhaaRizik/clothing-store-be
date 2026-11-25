@@ -66,6 +66,15 @@ class CatalogApiIntegrationTests {
     private static final ObjectId TEE_B = new ObjectId("650000000000000000000b06");
     private static final ObjectId TEE_A = new ObjectId("650000000000000000000b07");
 
+    private static final ObjectId SHIRT_S = new ObjectId("650000000000000000000c01");
+    private static final ObjectId SHIRT_M = new ObjectId("650000000000000000000c02");
+    private static final ObjectId SHIRT_L = new ObjectId("650000000000000000000c03");
+    private static final ObjectId SHIRT_ONE_SIZE = new ObjectId("650000000000000000000c04");
+    private static final ObjectId RETIRED_VARIANT = new ObjectId("650000000000000000000c05");
+
+    private static final Set<String> VARIANT_INTERNAL_FIELDS =
+            Set.of("stockQuantity", "sku", "displayOrder", "productId", "active");
+
     private static final List<String> NEWEST = List.of("kids-tee-b", "kids-tee-a", "men-shirt", "men-socks", "women-dress", "men-coat");
     private static final List<String> BY_NAME = List.of("men-socks", "kids-tee-b", "kids-tee-a", "men-shirt", "women-dress", "men-coat");
     private static final List<String> PRICE_ASC = List.of("women-dress", "men-socks", "kids-tee-b", "kids-tee-a", "men-shirt", "men-coat");
@@ -86,6 +95,7 @@ class CatalogApiIntegrationTests {
     void seed() {
         mongoTemplate.getCollection("categories").deleteMany(new Document());
         mongoTemplate.getCollection("products").deleteMany(new Document());
+        mongoTemplate.getCollection("product_variants").deleteMany(new Document());
 
         mongoTemplate.getCollection("categories").insertMany(List.of(
                 category(MEN, "men", "Men", "Clothing for men.", 1, true, "https://img.example/men.jpg"),
@@ -97,21 +107,48 @@ class CatalogApiIntegrationTests {
         mongoTemplate.getCollection("products").insertMany(List.of(
                 product(SHIRT, "men-shirt", "Classic Shirt", MEN, "Acme", "49.90", "39.90", true, true, 2,
                         List.of(image("https://img.example/shirt-front.jpg", "Front"),
-                                image("https://img.example/shirt-back.jpg", "Back"))),
+                                image("https://img.example/shirt-back.jpg", "Back").append("color", "Blue"))),
                 product(COAT, "men-coat", "Wool Coat", MEN, null, "189", null, true, false, 20, null),
                 product(SOCKS, "men-socks", "Ankle Socks", MEN, null, "10.5", null, true, false, 3, List.of()),
                 product(RETIRED, "men-retired", "Retired Tee", MEN, null, "5.00", null, false, true, 0, List.of()),
                 product(DRESS, "women-dress", "Summer Dress", WOMEN, null, "9.99", null, true, true, 5,
                         List.of(image("https://img.example/dress.jpg", "Dress")))));
         mongoTemplate.insert(new Product(TEE_A.toHexString(), "kids-tee-a", "Basic Tee", "Tee", KIDS.toHexString(), null,
-                List.of(new ProductImage("https://img.example/tee-a.jpg", "Tee A")), new BigDecimal("25.00"), null,
+                List.of(new ProductImage("https://img.example/tee-a.jpg", "Tee A", "Red")), new BigDecimal("25.00"), null,
                 true, false, daysAgo(1), daysAgo(1)));
         mongoTemplate.getCollection("products").insertOne(
                 product(TEE_B, "kids-tee-b", "Basic Tee", KIDS, null, "25.00", null, true, false, 1, List.of()));
+
+        mongoTemplate.getCollection("product_variants").insertMany(List.of(
+                variant(SHIRT_L, SHIRT, "SHIRT-BLU-L", "L", color("Blue", "#1E3A8A"), 0, true, 20),
+                variant(SHIRT_S, SHIRT, "SHIRT-BLU-S", "S", color("Blue", "#1E3A8A"), 7, true, 0),
+                variant(SHIRT_M, SHIRT, "SHIRT-BLU-M", "M", color("Blue", "#1E3A8A"), 12, false, 10),
+                variant(SHIRT_ONE_SIZE, SHIRT, "SHIRT-ONE", null, null, 1, true, 30),
+                variant(RETIRED_VARIANT, RETIRED, "RETIRED-ONE", null, null, 5, true, 0)));
+    }
+
+    private static Document color(String name, String hexCode) {
+        return new Document("name", name).append("hexCode", hexCode);
+    }
+
+    private static Document variant(ObjectId id, ObjectId productId, String sku, String size, Document color,
+            int stockQuantity, boolean active, int displayOrder) {
+        Date created = Date.from(BASE);
+        return new Document("_id", id).append("productId", productId).append("sku", sku).append("size", size)
+                .append("color", color).append("stockQuantity", stockQuantity).append("active", active)
+                .append("displayOrder", displayOrder).append("createdAt", created).append("updatedAt", created);
     }
 
     private static Instant daysAgo(int days) {
         return BASE.minus(Duration.ofDays(days));
+    }
+
+    private static Map<String, Object> imageJson(String url, String alt, String color) {
+        Map<String, Object> json = new java.util.LinkedHashMap<>();
+        json.put("url", url);
+        json.put("alt", alt);
+        json.put("color", color);
+        return json;
     }
 
     private static Document image(String url, String alt) {
@@ -304,6 +341,15 @@ class CatalogApiIntegrationTests {
             assertThat(shirt.get("primaryImage")).isEqualTo(Map.of("url", "https://img.example/shirt-front.jpg", "alt", "Front"));
             assertThat(shirt.get("price")).isEqualTo(Map.of("amount", "49.90", "currency", "ILS"));
             assertThat(shirt.get("salePrice")).isEqualTo(Map.of("amount", "39.90", "currency", "ILS"));
+        }
+
+        @Test
+        void cardPrimaryImageOmitsColorTagEvenWhenTheImageIsTagged() {
+            Response response = get("/api/v1/products?category=kids");
+
+            Map<String, Object> tee = response.<List<Map<String, Object>>>read("$.items[?(@.slug == 'kids-tee-a')]").getFirst();
+            assertThat(tee.get("primaryImage")).isEqualTo(Map.of("url", "https://img.example/tee-a.jpg", "alt", "Tee A"));
+            assertThat(allKeys(response)).doesNotContain("color");
         }
 
         @Test
@@ -552,18 +598,76 @@ class CatalogApiIntegrationTests {
 
             assertThat(response.status()).isEqualTo(200);
             assertThat(response.<Map<String, Object>>read("$")).containsOnlyKeys(
-                    "id", "slug", "name", "description", "brand", "images", "price", "salePrice", "category");
+                    "id", "slug", "name", "description", "brand", "images", "price", "salePrice", "category", "variants");
             assertThat(response.<String>read("$.id")).isEqualTo(SHIRT.toHexString());
             assertThat(response.<String>read("$.slug")).isEqualTo("men-shirt");
             assertThat(response.<String>read("$.name")).isEqualTo("Classic Shirt");
             assertThat(response.<String>read("$.description")).isEqualTo("Description of Classic Shirt");
             assertThat(response.<String>read("$.brand")).isEqualTo("Acme");
             assertThat(response.<List<Map<String, Object>>>read("$.images")).containsExactly(
-                    Map.of("url", "https://img.example/shirt-front.jpg", "alt", "Front"),
-                    Map.of("url", "https://img.example/shirt-back.jpg", "alt", "Back"));
+                    imageJson("https://img.example/shirt-front.jpg", "Front", null),
+                    imageJson("https://img.example/shirt-back.jpg", "Back", "Blue"));
             assertThat(response.<Map<String, Object>>read("$.price")).isEqualTo(Map.of("amount", "49.90", "currency", "ILS"));
             assertThat(response.<Map<String, Object>>read("$.salePrice")).isEqualTo(Map.of("amount", "39.90", "currency", "ILS"));
             assertThat(response.<Map<String, Object>>read("$.category")).isEqualTo(Map.of("slug", "men", "name", "Men"));
+        }
+
+        @Test
+        void returnsOnlyActiveVariantsOrderedByDisplayOrderWithAvailabilityAndNoStore() {
+            Response response = get("/api/v1/products/men-shirt");
+
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(response.header("Cache-Control")).isEqualTo("no-store");
+            assertThat(response.<List<String>>read("$.variants[*].id")).containsExactly(
+                    SHIRT_S.toHexString(), SHIRT_L.toHexString(), SHIRT_ONE_SIZE.toHexString());
+            assertThat(response.<Map<String, Object>>read("$.variants[0]")).containsOnlyKeys("id", "size", "color", "available");
+            assertThat(response.<String>read("$.variants[0].size")).isEqualTo("S");
+            assertThat(response.<Map<String, Object>>read("$.variants[0].color"))
+                    .isEqualTo(Map.of("name", "Blue", "hexCode", "#1E3A8A"));
+            assertThat(response.<List<Boolean>>read("$.variants[*].available")).containsExactly(true, false, true);
+            assertThat(response.<Map<String, Object>>read("$.variants[2]")).containsKeys("size", "color");
+            assertThat(response.<Object>read("$.variants[2].size")).isNull();
+            assertThat(response.<Object>read("$.variants[2].color")).isNull();
+        }
+
+        @Test
+        void variantsNeverExposeStockSkuOrInternalFields() {
+            Response response = get("/api/v1/products/men-shirt");
+
+            assertThat(allKeys(response)).doesNotContainAnyElementsOf(VARIANT_INTERNAL_FIELDS);
+            assertThat(response.body()).doesNotContain("SHIRT-BLU");
+        }
+
+        @Test
+        void legacyImageWithoutColorFieldIsReturnedWithExplicitNullColor() {
+            Response response = get("/api/v1/products/women-dress");
+
+            assertThat(response.<Map<String, Object>>read("$.images[0]")).containsOnlyKeys("url", "alt", "color");
+            assertThat(response.<Object>read("$.images[0].color")).isNull();
+        }
+
+        @Test
+        void imageColorTagMatchesAVariantColorName() {
+            Response response = get("/api/v1/products/men-shirt");
+
+            assertThat(response.<List<String>>read("$.variants[*].color.name")).contains(
+                    response.<String>read("$.images[1].color"));
+        }
+
+        @Test
+        void productWithoutVariantsHasEmptyVariantsArray() {
+            Response response = get("/api/v1/products/men-coat");
+
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(response.<List<Object>>read("$.variants")).isEmpty();
+        }
+
+        @Test
+        void inactiveProductWithVariantsIsStillNotFound() {
+            Response response = get("/api/v1/products/men-retired");
+
+            assertProblem(response, 404, "PRODUCT_NOT_FOUND");
+            assertThat(response.body()).doesNotContain(RETIRED_VARIANT.toHexString());
         }
 
         @Test
@@ -597,6 +701,8 @@ class CatalogApiIntegrationTests {
             assertThat(response.<String>read("$.id")).isEqualTo(TEE_A.toHexString());
             assertThat(response.<String>read("$.price.amount")).isEqualTo("25.00");
             assertThat(response.<Map<String, Object>>read("$.category")).isEqualTo(Map.of("slug", "kids", "name", "Kids"));
+            assertThat(response.<Map<String, Object>>read("$.images[0]"))
+                    .isEqualTo(imageJson("https://img.example/tee-a.jpg", "Tee A", "Red"));
         }
 
         @Test

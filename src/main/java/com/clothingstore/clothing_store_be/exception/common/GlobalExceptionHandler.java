@@ -15,14 +15,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import org.springframework.util.ClassUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +46,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setTitle(ErrorMessages.RESOURCE_NOT_FOUND_TITLE);
         problem.setProperty(ErrorMessages.CODE_PROPERTY, exception.getCode().name());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    ResponseEntity<ProblemDetail> handleConflict(ConflictException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+        problem.setTitle(ErrorMessages.CONFLICT_TITLE);
+        problem.setProperty(ErrorMessages.CODE_PROPERTY, exception.getCode().name());
+        exception.getProblemProperties().forEach(problem::setProperty);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -95,6 +110,40 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .orElse(ValidationConstants.UNKNOWN_TYPE_NAME);
         FieldErrorResponse error = new FieldErrorResponse(field,
                 ValidationConstants.INVALID_TYPE_MESSAGE_PREFIX + expectedTypeName);
+        return asObjectResponse(validationProblem(List.of(error)));
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleServletRequestBindingException(ServletRequestBindingException exception,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (exception instanceof MissingRequestHeaderException missingHeader) {
+            FieldErrorResponse error = new FieldErrorResponse(missingHeader.getHeaderName(),
+                    ErrorMessages.MISSING_HEADER_MESSAGE);
+            return asObjectResponse(validationProblem(List.of(error)));
+        }
+        return super.handleServletRequestBindingException(exception, headers, status, request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException exception,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Optional<JacksonException> jsonException = Optional.ofNullable(exception.getMostSpecificCause())
+                .filter(JacksonException.class::isInstance)
+                .map(JacksonException.class::cast);
+        String field = jsonException
+                .map(JacksonException::getPath)
+                .filter(path -> !path.isEmpty())
+                .map(path -> path.getLast().getPropertyName())
+                .orElse(null);
+        String message = jsonException
+                .filter(MismatchedInputException.class::isInstance)
+                .map(MismatchedInputException.class::cast)
+                .map(MismatchedInputException::getTargetType)
+                .filter(targetType -> field != null)
+                .map(targetType -> ValidationConstants.INVALID_TYPE_MESSAGE_PREFIX
+                        + ClassUtils.resolvePrimitiveIfNecessary(targetType).getSimpleName().toLowerCase(Locale.ROOT))
+                .orElse(ErrorMessages.MALFORMED_REQUEST_BODY_MESSAGE);
+        FieldErrorResponse error = new FieldErrorResponse(field, message);
         return asObjectResponse(validationProblem(List.of(error)));
     }
 

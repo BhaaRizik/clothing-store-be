@@ -13,6 +13,7 @@ public class OpenApiConfig {
         return new OpenAPI().info(new Info()
                 .title("Clothing Store API")
                 .version("v1")
-                .description("Public storefront catalog API. All endpoints are read-only and require no authentication."));
+                .description("Public storefront catalog and guest cart API. No endpoint requires authentication; "
+                        + "cart endpoints identify the cart by the X-Cart-Id header."));
     }
 }

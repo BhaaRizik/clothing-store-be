@@ -1,6 +1,9 @@
 package com.clothingstore.clothing_store_be.exception.common;
 
+import com.clothingstore.clothing_store_be.config.ErrorProblemDefinition;
+import com.clothingstore.clothing_store_be.config.ErrorProperties;
 import com.clothingstore.clothing_store_be.constants.ErrorMessages;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
@@ -8,41 +11,30 @@ import org.springframework.http.ProblemDetail;
 import java.util.List;
 import java.util.Optional;
 
+@RequiredArgsConstructor
 public class ProblemDetailFactory {
 
+    private final ErrorProperties errorProperties;
+
     public ProblemDetail createProblemForStatus(HttpStatusCode statusCode) {
-        return switch (Optional.ofNullable(HttpStatus.resolve(statusCode.value()))
-                .orElse(HttpStatus.INTERNAL_SERVER_ERROR)) {
-            case NOT_FOUND -> createCodedProblem(statusCode, ErrorMessages.ROUTE_NOT_FOUND_TITLE,
-                    ErrorMessages.ROUTE_NOT_FOUND_DETAIL, ErrorCode.ROUTE_NOT_FOUND);
-            case METHOD_NOT_ALLOWED -> createCodedProblem(statusCode, ErrorMessages.METHOD_NOT_ALLOWED_TITLE,
-                    ErrorMessages.METHOD_NOT_ALLOWED_DETAIL, ErrorCode.METHOD_NOT_ALLOWED);
-            case UNSUPPORTED_MEDIA_TYPE -> createCodedProblem(statusCode, ErrorMessages.UNSUPPORTED_MEDIA_TYPE_TITLE,
-                    ErrorMessages.UNSUPPORTED_MEDIA_TYPE_DETAIL, ErrorCode.UNSUPPORTED_MEDIA_TYPE);
-            case NOT_ACCEPTABLE -> createCodedProblem(statusCode, ErrorMessages.NOT_ACCEPTABLE_TITLE,
-                    ErrorMessages.NOT_ACCEPTABLE_DETAIL, ErrorCode.NOT_ACCEPTABLE);
-            case SERVICE_UNAVAILABLE -> createServiceUnavailableProblem();
-            default -> statusCode.is4xxClientError()
-                    ? createClientErrorProblem(statusCode)
-                    : createInternalErrorProblem(statusCode);
-        };
+        return Optional.ofNullable(HttpStatus.resolve(statusCode.value()))
+                .map(status -> errorProperties.statusCodes().get(status))
+                .map(code -> createConfiguredProblem(statusCode, code))
+                .orElseGet(() -> statusCode.is4xxClientError()
+                        ? createClientErrorProblem(statusCode, List.of())
+                        : createInternalErrorProblem(statusCode));
     }
 
     public ProblemDetail createServiceUnavailableProblem() {
-        return createCodedProblem(HttpStatus.SERVICE_UNAVAILABLE, ErrorMessages.SERVICE_UNAVAILABLE_TITLE,
-                ErrorMessages.SERVICE_UNAVAILABLE_DETAIL, ErrorCode.SERVICE_UNAVAILABLE);
+        return createProblemForStatus(HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     public ProblemDetail createInternalErrorProblem(HttpStatusCode statusCode) {
-        return createCodedProblem(statusCode, ErrorMessages.INTERNAL_ERROR_TITLE, ErrorMessages.INTERNAL_ERROR_DETAIL,
-                ErrorCode.INTERNAL_ERROR);
+        return createConfiguredProblem(statusCode, errorProperties.serverErrorCode());
     }
 
     public ProblemDetail createValidationProblem(List<?> errors) {
-        ProblemDetail problem = createCodedProblem(HttpStatus.BAD_REQUEST, ErrorMessages.VALIDATION_FAILED_TITLE,
-                ErrorMessages.VALIDATION_FAILED_DETAIL, ErrorCode.VALIDATION_ERROR);
-        problem.setProperty(ErrorMessages.ERRORS_PROPERTY, errors);
-        return problem;
+        return createClientErrorProblem(HttpStatus.BAD_REQUEST, errors);
     }
 
     public ProblemDetail createCodedProblem(HttpStatusCode statusCode, String title, String detail, ErrorCode code) {
@@ -59,10 +51,16 @@ public class ProblemDetailFactory {
                 .orElse(false);
     }
 
-    private ProblemDetail createClientErrorProblem(HttpStatusCode statusCode) {
-        ProblemDetail problem = createCodedProblem(statusCode, ErrorMessages.VALIDATION_FAILED_TITLE,
-                ErrorMessages.VALIDATION_FAILED_DETAIL, ErrorCode.VALIDATION_ERROR);
-        problem.setProperty(ErrorMessages.ERRORS_PROPERTY, List.of());
+    private ProblemDetail createClientErrorProblem(HttpStatusCode statusCode, List<?> errors) {
+        ProblemDetail problem = createConfiguredProblem(statusCode, errorProperties.clientErrorCode());
+        problem.setProperty(ErrorMessages.ERRORS_PROPERTY, errors);
         return problem;
+    }
+
+    private ProblemDetail createConfiguredProblem(HttpStatusCode statusCode, ErrorCode code) {
+        ErrorProblemDefinition definition = Optional.ofNullable(errorProperties.problems().get(code))
+                .orElseThrow(() -> new IllegalStateException(
+                        ErrorMessages.MISSING_ERROR_PROBLEM_FORMAT.formatted(code.name())));
+        return createCodedProblem(statusCode, definition.title(), definition.detail(), code);
     }
 }

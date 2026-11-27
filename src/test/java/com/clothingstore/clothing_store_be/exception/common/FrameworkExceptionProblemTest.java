@@ -1,75 +1,96 @@
 package com.clothingstore.clothing_store_be.exception.common;
 
-import org.junit.jupiter.api.BeforeEach;
+import com.clothingstore.clothing_store_be.config.ApplicationYamlErrorPropertiesLoader;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.context.request.ServletWebRequest;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 class FrameworkExceptionProblemTest {
 
-    private MockMvc mockMvc;
+    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(
+            new ProblemDetailFactory(new ApplicationYamlErrorPropertiesLoader().loadErrorProperties()));
 
-    @BeforeEach
-    void setUpMockMvc() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new FrameworkErrorTriggerEndpoints())
-                .setControllerAdvice(new GlobalExceptionHandler(new ProblemDetailFactory()))
-                .build();
+    private ProblemDetail handle(Exception exception, HttpStatus expectedStatus) throws Exception {
+        ResponseEntity<Object> response = handler.handleException(exception,
+                new ServletWebRequest(new MockHttpServletRequest()));
+
+        assertThat(response).isNotNull();
+        assertThat(response.getStatusCode()).isEqualTo(expectedStatus);
+        assertThat(response.getBody()).isInstanceOf(ProblemDetail.class);
+        ProblemDetail problem = (ProblemDetail) response.getBody();
+        assertThat(problem.getType()).hasToString("about:blank");
+        assertThat(problem.getStatus()).isEqualTo(expectedStatus.value());
+        return problem;
     }
 
-    private static ResultActions expectProblem(ResultActions result, int status, String code, String title,
-            String detail) throws Exception {
-        return result.andExpect(status().is(status))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.type").value("about:blank"))
-                .andExpect(jsonPath("$.title").value(title))
-                .andExpect(jsonPath("$.status").value(status))
-                .andExpect(jsonPath("$.detail").value(detail))
-                .andExpect(jsonPath("$.code").value(code));
+    private static void assertProblemText(ProblemDetail problem, String code, String title, String detail) {
+        assertThat(problem.getTitle()).isEqualTo(title);
+        assertThat(problem.getDetail()).isEqualTo(detail);
+        assertThat(problem.getProperties()).containsEntry("code", code);
     }
 
-    @Test
-    void missingRequestParameterReturns400ValidationErrorWithoutFrameworkText() throws Exception {
-        expectProblem(mockMvc.perform(get("/framework-errors/required-parameter")), 400, "VALIDATION_ERROR",
-                "Validation failed", "One or more request parameters are invalid.")
-                .andExpect(jsonPath("$.errors").isArray())
-                .andExpect(jsonPath("$.errors").isEmpty())
-                .andExpect(content().string(not(containsString("secretParameter"))));
+    private static MethodParameter stringParameter() throws NoSuchMethodException {
+        return new MethodParameter(String.class.getMethod("concat", String.class), 0);
     }
 
     @Test
-    void otherFramework4xxKeepsStatusAndUsesValidationErrorCode() throws Exception {
-        expectProblem(mockMvc.perform(get("/framework-errors/upload-too-large")), 413, "VALIDATION_ERROR",
-                "Validation failed", "One or more request parameters are invalid.")
-                .andExpect(content().string(not(containsString("1024"))));
+    void missingRequestParameterReturns400ValidationErrorWithoutParameterName() throws Exception {
+        ProblemDetail problem = handle(new MissingServletRequestParameterException("secretParameter", "String"),
+                HttpStatus.BAD_REQUEST);
+
+        assertProblemText(problem, "VALIDATION_ERROR", "Validation failed",
+                "One or more request parameters are invalid.");
+        assertThat(problem.getProperties()).containsEntry("errors", List.of());
+        assertThat(problem.toString()).doesNotContain("secretParameter");
     }
 
     @Test
-    void missingPathVariableReturns500InternalErrorWithoutFrameworkText() throws Exception {
-        expectProblem(mockMvc.perform(get("/framework-errors/missing-path-variable")), 500, "INTERNAL_ERROR",
-                "Internal server error", "An unexpected error occurred. Please try again later.")
-                .andExpect(content().string(not(containsString("secretVariable"))));
+    void maxUploadSizeExceededReturns413ValidationError() throws Exception {
+        ProblemDetail problem = handle(new MaxUploadSizeExceededException(1024), HttpStatus.CONTENT_TOO_LARGE);
+
+        assertProblemText(problem, "VALIDATION_ERROR", "Validation failed",
+                "One or more request parameters are invalid.");
+        assertThat(problem.toString()).doesNotContain("1024");
     }
 
     @Test
-    void responseWriteFailureReturns500InternalErrorWithoutFrameworkText() throws Exception {
-        expectProblem(mockMvc.perform(get("/framework-errors/not-writable")), 500, "INTERNAL_ERROR",
-                "Internal server error", "An unexpected error occurred. Please try again later.")
-                .andExpect(content().string(not(containsString("secret converter failure"))))
-                .andExpect(content().string(not(containsString("HttpMessageNotWritableException"))));
+    void missingPathVariableReturns500InternalErrorWithoutVariableName() throws Exception {
+        ProblemDetail problem = handle(new MissingPathVariableException("secretVariable", stringParameter()),
+                HttpStatus.INTERNAL_SERVER_ERROR);
+
+        assertProblemText(problem, "INTERNAL_ERROR", "Internal server error",
+                "An unexpected error occurred. Please try again later.");
+        assertThat(problem.toString()).doesNotContain("secretVariable");
+    }
+
+    @Test
+    void messageNotWritableReturns500InternalErrorWithoutMessage() throws Exception {
+        ProblemDetail problem = handle(new HttpMessageNotWritableException("secret converter failure"),
+                HttpStatus.INTERNAL_SERVER_ERROR);
+
+        assertProblemText(problem, "INTERNAL_ERROR", "Internal server error",
+                "An unexpected error occurred. Please try again later.");
+        assertThat(problem.toString()).doesNotContain("secret converter failure", "HttpMessageNotWritableException");
     }
 
     @Test
     void asyncRequestTimeoutReturns503ServiceUnavailable() throws Exception {
-        expectProblem(mockMvc.perform(get("/framework-errors/async-timeout")), 503, "SERVICE_UNAVAILABLE",
-                "Service unavailable", "The service is temporarily unavailable. Please try again later.");
+        ProblemDetail problem = handle(new AsyncRequestTimeoutException(), HttpStatus.SERVICE_UNAVAILABLE);
+
+        assertProblemText(problem, "SERVICE_UNAVAILABLE", "Service unavailable",
+                "The service is temporarily unavailable. Please try again later.");
     }
 }

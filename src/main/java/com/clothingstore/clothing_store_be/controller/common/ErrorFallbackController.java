@@ -23,12 +23,11 @@ import java.util.Optional;
 @Hidden
 @RestController
 @RequiredArgsConstructor
-@RequestMapping(ErrorMessages.ERROR_PATH)
 public class ErrorFallbackController implements ErrorController {
 
     private final ProblemDetailFactory problemDetailFactory;
 
-    @RequestMapping
+    @RequestMapping(ErrorMessages.ERROR_PATH_PLACEHOLDER)
     public ResponseEntity<ProblemDetail> renderErrorProblem(HttpServletRequest request) {
         HttpStatusCode statusCode = resolveErrorStatus(request);
         Optional.ofNullable(request.getAttribute(RequestDispatcher.ERROR_EXCEPTION))

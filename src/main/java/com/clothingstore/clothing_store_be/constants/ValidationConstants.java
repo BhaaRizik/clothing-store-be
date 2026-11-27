@@ -15,6 +15,9 @@ public final class ValidationConstants {
             + ProductSortParameters.NAME + ", " + ProductSortParameters.PRICE_ASC + ", " + ProductSortParameters.PRICE_DESC;
     public static final String MAX_VALUE_MESSAGE = "must be less than or equal to the configured maximum";
     public static final String MAX_VALUE_MESSAGE_FORMAT = "must be less than or equal to %d";
+    public static final int MIN_CART_ITEM_QUANTITY = 1;
+    public static final String CART_ITEM_QUANTITY_RANGE_MESSAGE = "Quantity must be between 1 and the configured maximum.";
+    public static final String CART_ITEM_QUANTITY_RANGE_MESSAGE_FORMAT = "Quantity must be between %d and %d.";
     public static final String INVALID_TYPE_MESSAGE_PREFIX = "must be a valid ";
     public static final String UNKNOWN_TYPE_NAME = "value";
 }

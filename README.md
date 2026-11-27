@@ -40,6 +40,8 @@ There is no `spring.profiles.active` in any YAML file. If you start the app with
 | `MONGODB_URI` | `spring.mongodb.uri` | `mongodb://localhost:27017/clothing_store` | `''` (must be set in the environment) | MongoDB connection string, including the database name. In prod this is the Atlas `mongodb+srv://...` URI. Never commit it. |
 | `FRONTEND_ORIGINS` | `app.cors.allowed-origins` | `http://localhost:5173` | `''` (must be set in the environment) | Comma-separated list of browser origins allowed to call `/api/**`, for example `https://shop.example.com,https://www.shop.example.com`. Spaces around entries are trimmed. Wildcards, paths and trailing slashes are rejected at startup. |
 | `STORE_CURRENCY` | `store.currency` | `ILS` | `ILS` | ISO 4217 code returned with every price |
+| `CART_MAX_ITEM_QUANTITY` | `app.cart.max-item-quantity` | `10` (default in `application.yaml`) | `10` (default) | Maximum units of **one cart line**, that is one size/color variant. Must be positive. Requests above it get `400 VALIDATION_ERROR`; adding to a line past it gets `409 CART_ITEM_LIMIT_EXCEEDED`. |
+| `CART_INACTIVE_EXPIRY` | `app.cart.inactive-cart-expiry` | `30d` (default) | `30d` (default) | How long a cart may stay untouched before MongoDB deletes it (TTL index on `carts.updatedAt`). Spring duration format, for example `30d`, `12h`, `90m`. |
 | `PORT` | `server.port` | `8080` | set by Render | HTTP port |
 | `SPRING_PROFILES_ACTIVE` | `spring.profiles.active` | — | `prod` | The profile to use, given at run time only |
 
@@ -59,6 +61,10 @@ These limits are configured in `application.yaml` under `app.catalog.pagination`
 | `default-page-size` | `20` | `size` when the request omits it |
 
 Values above a maximum return `400 VALIDATION_ERROR` with, for example, `errors: [{ "field": "page", "message": "must be less than or equal to 10000" }]`.
+
+### Cart limits
+
+`app.cart` in `application.yaml` is bound to `CartProperties`. Both keys have defaults (`10` and `30d`), so profile files do not need to set them. At startup the backend creates the TTL index `ttl_carts_updated_at` on `carts.updatedAt` with the configured expiry; when `CART_INACTIVE_EXPIRY` changes, the existing index is updated in place (`collMod`) on the next start. MongoDB's TTL monitor runs about once a minute, so expired carts can live slightly longer than the expiry.
 
 ## Running locally
 
@@ -112,7 +118,7 @@ ClothingStoreBeApplication.java   entry point, logs the startup message
 controller/   REST controllers (HTTP only)
 service/      business logic
 repository/   Spring Data repositories and the @Repository custom fragment
-model/        MongoDB documents (Category, Product, ProductVariant, Promotion) and the ProductSort option
+model/        MongoDB documents (Category, Product, ProductVariant, Promotion, Cart), the ProductSort option and the priced cart values the cart mapper reads
 dto/          response records, one top-level type per file
 mapper/       MapStruct mappers for every document-to-DTO conversion, money formatting and page envelopes
 exception/    exceptions, error codes and the global ProblemDetail handler
@@ -121,11 +127,11 @@ constants/    fixed literals: messages, patterns, sort parameter names
 validation/   Bean Validation constraints that check request values against configured limits
 ```
 
-Inside `controller`, `service`, `repository`, `model`, `dto`, `mapper` and `exception`, classes are grouped in domain sub-packages: `category/`, `product/`, `promotion/`, plus `common/` for shared types (`PageResponse`, `Money`, `ImageResponse`, `FieldErrorResponse`, `MoneyMapper`, `ErrorCode`, `ResourceNotFoundException`, `GlobalExceptionHandler`). Example: `repository/product/ProductRepository`. `config`, `constants` and `validation` stay flat. Tests mirror the same packages.
+Inside `controller`, `service`, `repository`, `model`, `dto`, `mapper` and `exception`, classes are grouped in domain sub-packages: `cart/`, `category/`, `product/`, `promotion/`, plus `common/` for shared types (`PageResponse`, `Money`, `ImageResponse`, `FieldErrorResponse`, `MoneyMapper`, `ErrorCode`, `ResourceNotFoundException`, `ConflictException`, `GlobalExceptionHandler`). Example: `repository/product/ProductRepository`. `config`, `constants` and `validation` stay flat. Tests mirror the same packages.
 
 Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for logging; MapStruct for all mapping; DTOs and documents hold fields only; tunables come from `application.yaml`; no comments in source code.
 
-## API (v1, public, read-only)
+## API (v1, public, no authentication)
 
 | Endpoint | Description |
 |---|---|
@@ -134,8 +140,13 @@ Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for lo
 | `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. |
 | `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing. |
 | `GET /api/v1/promotions` | Homepage promotions that are live right now, sorted by `displayOrder` and then `title`. Always returns 200 with a JSON array, which is `[]` when there are none. |
+| `POST /api/v1/cart` | Creates an empty guest cart. `201`, `Location: /api/v1/cart`, body is the cart with its new `id`. |
+| `GET /api/v1/cart` | The cart named by the `X-Cart-Id` header, with current prices, availability and subtotal. |
+| `POST /api/v1/cart/items` | Adds `{ variantId, quantity }` to the cart. |
+| `PATCH /api/v1/cart/items/{variantId}` | Sets the line quantity to `{ quantity }`. |
+| `DELETE /api/v1/cart/items/{variantId}` | Removes the line. |
 
-Money is returned as `{ "amount": "49.90", "currency": "ILS" }`. Errors use RFC 9457 problem details (`application/problem+json`) with a stable `code` (`CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `VALIDATION_ERROR`, `INTERNAL_ERROR`). Validation errors also include `errors: [{ field, message }]`.
+Money is returned as `{ "amount": "49.90", "currency": "ILS" }`. Errors use RFC 9457 problem details (`application/problem+json`) with a stable `code` (`CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `CART_NOT_FOUND`, `CART_ITEM_NOT_FOUND`, `VARIANT_UNAVAILABLE`, `INSUFFICIENT_STOCK`, `CART_ITEM_LIMIT_EXCEEDED`, `CART_CONFLICT`, `VALIDATION_ERROR`, `INTERNAL_ERROR`). Validation errors also include `errors: [{ field, message }]`.
 
 ### Product details and variants
 
@@ -209,6 +220,57 @@ Promotions live in the `promotions` collection:
 Index: `ix_promotions_active_order` on `{ active: 1, displayOrder: 1 }`.
 
 There is no admin API for promotions yet. An administrator manages them directly in MongoDB (for example with `mongosh` or Atlas Data Explorer). Banner images are served by the backend from `src/main/resources/static/images/promotions/`. The local seed adds two active promotions and one inactive promotion. It runs only on an empty volume, so run `docker compose down -v && docker compose up -d` to re-seed.
+
+### Guest cart
+
+The cart is identified by the `X-Cart-Id` request header. `POST /api/v1/cart` generates a random UUID (`UUID.randomUUID()`, backed by `SecureRandom`) and returns it as `id`. The frontend stores it and sends it on every other cart request. There is no cookie. Treat the id like a bearer token: anyone who has it can read and change the cart, so the backend never logs it.
+
+Cart responses carry `Cache-Control: no-store` and have this shape:
+
+```json
+{ "id": "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c", "itemCount": 3, "subtotal": { "amount": "120.00", "currency": "ILS" }, "maxItemQuantity": 10,
+  "items": [ { "variantId": "...", "productId": "...", "productSlug": "men-classic-oxford-shirt", "productName": "Classic Oxford Shirt",
+    "image": { "url": "/images/catalog/men-classic-oxford-shirt-light-blue.svg", "alt": "..." }, "size": "M", "color": { "name": "Light blue", "hexCode": "#9DB9D8" },
+    "quantity": 3, "unitPrice": { "amount": "40.00", "currency": "ILS" }, "originalPrice": { "amount": "49.90", "currency": "ILS" },
+    "lineTotal": { "amount": "120.00", "currency": "ILS" }, "status": "AVAILABLE", "priceChanged": false } ] }
+```
+
+Rules:
+
+- Prices always come from the catalog. Unknown JSON fields such as a client `price` or `total` are ignored.
+- `unitPrice` is `salePrice` when set, otherwise `basePrice`. `originalPrice` is `basePrice` when the product is on sale, otherwise `null`. `lineTotal` is `unitPrice × quantity`. Amounts have 2 decimals, rounded half up.
+- `status` is `UNAVAILABLE` when the product is missing or inactive, the variant is missing or inactive, or its stock is 0 or less; `INSUFFICIENT_STOCK` when stock is positive but below the line quantity; otherwise `AVAILABLE`.
+- `subtotal` is the sum of `lineTotal` over lines that are not `UNAVAILABLE`, and is `"0.00"` for an empty cart. `itemCount` is the sum of quantities over all lines.
+- `priceChanged` is `true` when the current `unitPrice` differs from the price saved when the line was created or its quantity last changed.
+- Items are ordered by the time they were first added. Adding a variant that is already in the cart increases the quantity of that line.
+- `productSlug`, `productName`, `image`, `unitPrice`, `originalPrice` and `lineTotal` are `null` when the product no longer exists; `size` and `color` are `null` when the variant no longer exists (or has no size or color).
+- `image` is the first product image tagged with the variant color, else the first untagged image, else the first image, else `null`.
+- Stock is checked but never reserved or decremented, and stock counts are never returned.
+
+Errors:
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | `X-Cart-Id` header missing (`field: "X-Cart-Id"`), blank `variantId`, `quantity` missing or not a JSON integer (`1.5`, `"2"` and `true` are rejected), `quantity` below 1 or above `CART_MAX_ITEM_QUANTITY`, malformed JSON. Range errors on `quantity` carry the message `Quantity must be between 1 and <max>.` with the configured maximum filled in, so the frontend can show it as is; type errors carry `must be a valid integer`. |
+| 404 | `CART_NOT_FOUND` | Cart id unknown, expired or not a UUID (the same response for all three) |
+| 404 | `CART_ITEM_NOT_FOUND` | `PATCH`/`DELETE` of a variant that is not in the cart |
+| 409 | `VARIANT_UNAVAILABLE` | Add or `PATCH` of a variant that is unknown, inactive, out of stock or whose product is missing or inactive |
+| 409 | `CART_ITEM_LIMIT_EXCEEDED` | Adding would take the line above `CART_MAX_ITEM_QUANTITY`; the problem has a `maxItemQuantity` property |
+| 409 | `INSUFFICIENT_STOCK` | The resulting quantity is above the variant stock |
+| 409 | `CART_CONFLICT` | The cart was changed by another request at the same time (optimistic locking); reload and retry |
+
+Carts live in the `carts` collection:
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | string | random UUID, returned as `id` |
+| `items[]` | array | `{ productId: ObjectId, variantId: ObjectId, quantity: int, unitPriceSnapshot: Decimal128, addedAt: date }` |
+| `createdAt`, `updatedAt` | date | every write updates `updatedAt` |
+| `version` | long | optimistic locking |
+
+Index: `ttl_carts_updated_at` on `{ updatedAt: 1 }` with `expireAfterSeconds` from `CART_INACTIVE_EXPIRY`.
+
+CORS: `/api/v1/cart/**` allows `GET`, `HEAD`, `POST`, `PATCH`, `DELETE` and `OPTIONS`; the rest of `/api/**` stays read-only (`GET`, `HEAD`, `OPTIONS`). Both allow only the `Content-Type`, `Accept` and `X-Cart-Id` request headers, the configured origins, and no credentials.
 
 ## Deployment (Render)
 

@@ -1,5 +1,7 @@
 server:
   port: ${PORT:8080}
+  error:
+    path: ${SERVER_ERROR_PATH:/error}
 
 spring:
   application:
@@ -21,6 +23,37 @@ app:
   cart:
     max-item-quantity: ${CART_MAX_ITEM_QUANTITY:10}
     inactive-cart-expiry: ${CART_INACTIVE_EXPIRY:30d}
+  errors:
+    status-codes:
+      NOT_FOUND: ROUTE_NOT_FOUND
+      METHOD_NOT_ALLOWED: METHOD_NOT_ALLOWED
+      NOT_ACCEPTABLE: NOT_ACCEPTABLE
+      UNSUPPORTED_MEDIA_TYPE: UNSUPPORTED_MEDIA_TYPE
+      SERVICE_UNAVAILABLE: SERVICE_UNAVAILABLE
+    client-error-code: VALIDATION_ERROR
+    server-error-code: INTERNAL_ERROR
+    problems:
+      ROUTE_NOT_FOUND:
+        title: Route not found
+        detail: The requested endpoint does not exist.
+      METHOD_NOT_ALLOWED:
+        title: Method not allowed
+        detail: The HTTP method is not supported for this endpoint.
+      NOT_ACCEPTABLE:
+        title: Not acceptable
+        detail: The requested response media type is not supported.
+      UNSUPPORTED_MEDIA_TYPE:
+        title: Unsupported media type
+        detail: The request content type is not supported.
+      SERVICE_UNAVAILABLE:
+        title: Service unavailable
+        detail: The service is temporarily unavailable. Please try again later.
+      VALIDATION_ERROR:
+        title: Validation failed
+        detail: One or more request parameters are invalid.
+      INTERNAL_ERROR:
+        title: Internal server error
+        detail: An unexpected error occurred. Please try again later.
 
 store:
   currency: ${STORE_CURRENCY:ILS}

@@ -1,11 +1,13 @@
 package com.clothingstore.clothing_store_be.config;
 
 import com.clothingstore.clothing_store_be.constants.CartConstants;
+import com.clothingstore.clothing_store_be.exception.common.ProblemDetailFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -15,7 +17,9 @@ import tools.jackson.databind.type.LogicalType;
 
 @Configuration
 @RequiredArgsConstructor
-@EnableConfigurationProperties({CorsProperties.class, CatalogPaginationProperties.class, CartProperties.class})
+@Import(ProblemDetailFactory.class)
+@EnableConfigurationProperties({CorsProperties.class, CatalogPaginationProperties.class, CartProperties.class,
+        ErrorProperties.class})
 public class WebConfig implements WebMvcConfigurer {
 
     private final CorsProperties corsProperties;

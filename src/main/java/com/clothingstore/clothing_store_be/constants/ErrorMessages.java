@@ -3,18 +3,19 @@ package com.clothingstore.clothing_store_be.constants;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
+import java.net.URI;
+
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ErrorMessages {
 
+    public static final URI DEFAULT_PROBLEM_TYPE = URI.create("about:blank");
+    public static final String ERROR_PATH_PLACEHOLDER = "${server.error.path}";
+    public static final String MISSING_ERROR_PROBLEM_FORMAT = "No problem definition is configured for error code %s";
     public static final String CODE_PROPERTY = "code";
     public static final String ERRORS_PROPERTY = "errors";
     public static final String RESOURCE_NOT_FOUND_TITLE = "Resource not found";
     public static final String CATEGORY_NOT_FOUND_DETAIL = "Category not found.";
     public static final String PRODUCT_NOT_FOUND_DETAIL = "Product not found.";
-    public static final String VALIDATION_FAILED_TITLE = "Validation failed";
-    public static final String VALIDATION_FAILED_DETAIL = "One or more request parameters are invalid.";
-    public static final String INTERNAL_ERROR_TITLE = "Internal server error";
-    public static final String INTERNAL_ERROR_DETAIL = "An unexpected error occurred. Please try again later.";
     public static final String CART_NOT_FOUND_DETAIL = "Cart not found.";
     public static final String CART_ITEM_NOT_FOUND_DETAIL = "Cart item not found.";
     public static final String CONFLICT_TITLE = "Conflict";

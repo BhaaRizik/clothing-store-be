@@ -4,12 +4,17 @@ import com.clothingstore.clothing_store_be.constants.ErrorMessages;
 import com.clothingstore.clothing_store_be.constants.LogMessages;
 import com.clothingstore.clothing_store_be.constants.ValidationConstants;
 import com.clothingstore.clothing_store_be.dto.common.FieldErrorResponse;
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.NestedExceptionUtils;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -38,21 +43,22 @@ import java.util.Optional;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private final ProblemDetailFactory problemDetailFactory;
 
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<ProblemDetail> handleResourceNotFound(ResourceNotFoundException exception) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
-        problem.setTitle(ErrorMessages.RESOURCE_NOT_FOUND_TITLE);
-        problem.setProperty(ErrorMessages.CODE_PROPERTY, exception.getCode().name());
+        ProblemDetail problem = problemDetailFactory.createCodedProblem(HttpStatus.NOT_FOUND, ErrorMessages.RESOURCE_NOT_FOUND_TITLE,
+                exception.getMessage(), exception.getCode());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<ProblemDetail> handleConflict(ConflictException exception) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
-        problem.setTitle(ErrorMessages.CONFLICT_TITLE);
-        problem.setProperty(ErrorMessages.CODE_PROPERTY, exception.getCode().name());
+        ProblemDetail problem = problemDetailFactory.createCodedProblem(HttpStatus.CONFLICT, ErrorMessages.CONFLICT_TITLE,
+                exception.getMessage(), exception.getCode());
         exception.getProblemProperties().forEach(problem::setProperty);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
@@ -66,14 +72,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return validationProblem(errors);
     }
 
+    @ExceptionHandler({DataAccessResourceFailureException.class, MongoTimeoutException.class,
+            MongoSocketException.class})
+    ResponseEntity<ProblemDetail> handleDataStoreUnavailable(Exception exception) {
+        log.error(LogMessages.DATA_STORE_UNAVAILABLE, exception.getClass().getSimpleName(),
+                NestedExceptionUtils.getMostSpecificCause(exception).getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(problemDetailFactory.createServiceUnavailableProblem());
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> handleUnexpectedException(Exception exception) {
         log.error(LogMessages.UNHANDLED_REQUEST_EXCEPTION, exception);
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
-                ErrorMessages.INTERNAL_ERROR_DETAIL);
-        problem.setTitle(ErrorMessages.INTERNAL_ERROR_TITLE);
-        problem.setProperty(ErrorMessages.CODE_PROPERTY, ErrorCode.INTERNAL_ERROR.name());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(problemDetailFactory.createInternalErrorProblem(HttpStatus.INTERNAL_SERVER_ERROR));
     }
 
     @Override
@@ -147,15 +159,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return asObjectResponse(validationProblem(List.of(error)));
     }
 
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(Exception exception, Object body, HttpHeaders headers,
+            HttpStatusCode statusCode, WebRequest request) {
+        if (statusCode.is5xxServerError()) {
+            log.error(LogMessages.FRAMEWORK_SERVER_ERROR, exception);
+        }
+        return super.handleExceptionInternal(exception, body, headers, statusCode, request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> createResponseEntity(Object body, HttpHeaders headers, HttpStatusCode statusCode,
+            WebRequest request) {
+        ProblemDetail problem = Optional.ofNullable(body)
+                .filter(ProblemDetail.class::isInstance)
+                .map(ProblemDetail.class::cast)
+                .filter(problemDetailFactory::hasErrorCode)
+                .orElseGet(() -> problemDetailFactory.createProblemForStatus(statusCode));
+        return super.createResponseEntity(problem, headers, statusCode, request);
+    }
+
     private ResponseEntity<ProblemDetail> validationProblem(List<FieldErrorResponse> errors) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                ErrorMessages.VALIDATION_FAILED_DETAIL);
-        problem.setTitle(ErrorMessages.VALIDATION_FAILED_TITLE);
-        problem.setProperty(ErrorMessages.CODE_PROPERTY, ErrorCode.VALIDATION_ERROR.name());
-        problem.setProperty(ErrorMessages.ERRORS_PROPERTY, errors.stream()
+        List<FieldErrorResponse> sortedErrors = errors.stream()
                 .sorted(Comparator.comparing(FieldErrorResponse::field, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+                .toList();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(problemDetailFactory.createValidationProblem(sortedErrors));
     }
 
     private static String lastNodeName(Path propertyPath) {

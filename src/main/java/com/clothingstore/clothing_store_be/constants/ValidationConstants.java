@@ -20,4 +20,9 @@ public final class ValidationConstants {
     public static final String CART_ITEM_QUANTITY_RANGE_MESSAGE_FORMAT = "Quantity must be between %d and %d.";
     public static final String INVALID_TYPE_MESSAGE_PREFIX = "must be a valid ";
     public static final String UNKNOWN_TYPE_NAME = "value";
+    public static final String COMPLETE_ERROR_PROBLEMS_MESSAGE =
+            "every configured error code must have a problem definition with a title and detail";
+    public static final String MISSING_ERROR_PROBLEM_MESSAGE_FORMAT =
+            "error code %s must have a problem definition with a non-blank title and detail";
+    public static final String ERROR_PROBLEMS_PROPERTY = "problems";
 }

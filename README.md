@@ -43,6 +43,7 @@ There is no `spring.profiles.active` in any YAML file. If you start the app with
 | `CART_MAX_ITEM_QUANTITY` | `app.cart.max-item-quantity` | `10` (default in `application.yaml`) | `10` (default) | Maximum units of **one cart line**, that is one size/color variant. Must be positive. Requests above it get `400 VALIDATION_ERROR`; adding to a line past it gets `409 CART_ITEM_LIMIT_EXCEEDED`. |
 | `CART_INACTIVE_EXPIRY` | `app.cart.inactive-cart-expiry` | `30d` (default) | `30d` (default) | How long a cart may stay untouched before MongoDB deletes it (TTL index on `carts.updatedAt`). Spring duration format, for example `30d`, `12h`, `90m`. |
 | `PORT` | `server.port` | `8080` | set by Render | HTTP port |
+| `SERVER_ERROR_PATH` | `server.error.path` | `/error` (default in `application.yaml`) | `/error` (default) | Path of the fallback endpoint that renders servlet-level errors (filter exceptions, `sendError`) as `application/problem+json`. Same in every profile, so it is not set in the profile files. |
 | `SPRING_PROFILES_ACTIVE` | `spring.profiles.active` | — | `prod` | The profile to use, given at run time only |
 
 With the `prod` profile and no environment variables, startup fails fast:

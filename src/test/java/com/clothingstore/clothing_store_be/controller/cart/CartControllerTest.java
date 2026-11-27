@@ -159,6 +159,8 @@ class CartControllerTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "{\"variantId\":\"\",\"quantity\":1}",
+            "{\"variantId\":\"not-an-id\",\"quantity\":1}",
+            "{\"variantId\":12345,\"quantity\":1}",
             "{\"quantity\":1}",
             "{\"variantId\":\"650000000000000000000c01\"}",
             "{\"variantId\":\"650000000000000000000c01\",\"quantity\":0}",
@@ -171,6 +173,96 @@ class CartControllerTest {
         expectProblem(mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
                 .contentType(MediaType.APPLICATION_JSON).content(body)), 400, "VALIDATION_ERROR");
         verifyNoInteractions(cartService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "not-an-id", "650000000000000000000c0", "650000000000000000000c011",
+            "65000000000000000000zz01", "{$ne: null}", "<script>alert(1)</script>"})
+    void malformedBodyVariantIdReturns400OnVariantIdFieldWithoutEchoingInput(String variantId) throws Exception {
+        ResultActions result = mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"variantId\":\"" + variantId + "\",\"quantity\":1}"));
+
+        expectProblem(result, 400, "VALIDATION_ERROR");
+        result.andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("variantId"))
+                .andExpect(jsonPath("$.errors[0].message").value("must be a valid product variant id"))
+                .andExpect(content().string(not(containsString("not-an-id"))))
+                .andExpect(content().string(not(containsString("script"))))
+                .andExpect(content().string(not(containsString("$ne"))));
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void uppercaseHexVariantIdIsWellFormed() throws Exception {
+        String uppercaseVariantId = VARIANT_ID.toUpperCase();
+        when(cartService.addCartItem(CART_ID, new AddCartItemRequest(uppercaseVariantId, 1))).thenReturn(CART);
+
+        mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"variantId\":\"" + uppercaseVariantId + "\",\"quantity\":1}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void missingVariantIdIsReportedOnVariantIdField() throws Exception {
+        mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("variantId"));
+        verifyNoInteractions(cartService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"variantId\":\"not-an-id\",\"quantity\":0}",
+            "{\"variantId\":\"not-an-id\",\"quantity\":11}",
+            "{\"variantId\":\"not-an-id\"}",
+            "{\"quantity\":0}",
+            "{}"})
+    void everyInvalidAddFieldIsListed(String body) throws Exception {
+        mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[0].field").value("quantity"))
+                .andExpect(jsonPath("$.errors[1].field").value("variantId"));
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void emptyOrMalformedJsonBodyReturns400WithoutInternals() throws Exception {
+        for (String body : List.of("", "{", "{\"variantId\":", "[]", "null", "\"text\"")) {
+            ResultActions added = mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                    .contentType(MediaType.APPLICATION_JSON).content(body));
+            expectProblem(added, 400, "VALIDATION_ERROR");
+            added.andExpect(content().string(not(containsString("Exception"))))
+                    .andExpect(content().string(not(containsString("jackson"))));
+            ResultActions patched = mockMvc.perform(patch("/api/v1/cart/items/" + VARIANT_ID).header("X-Cart-Id", CART_ID)
+                    .contentType(MediaType.APPLICATION_JSON).content(body));
+            expectProblem(patched, 400, "VALIDATION_ERROR");
+            patched.andExpect(content().string(not(containsString("Exception"))))
+                    .andExpect(content().string(not(containsString("jackson"))));
+        }
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void clientPriceAndTotalFieldsAreIgnored() throws Exception {
+        when(cartService.addCartItem(CART_ID, new AddCartItemRequest(VARIANT_ID, 2))).thenReturn(CART);
+
+        mockMvc.perform(post("/api/v1/cart/items").header("X-Cart-Id", CART_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"variantId\":\"" + VARIANT_ID + "\",\"quantity\":2,\"price\":\"0.01\","
+                                + "\"unitPrice\":{\"amount\":\"0.01\",\"currency\":\"ILS\"},\"subtotal\":0,"
+                                + "\"lineTotal\":\"0.02\",\"unitPriceSnapshot\":0.01,\"productId\":\"x\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].unitPrice.amount").value("40.00"))
+                .andExpect(jsonPath("$.subtotal.amount").value("80.00"));
+
+        verify(cartService).addCartItem(CART_ID, new AddCartItemRequest(VARIANT_ID, 2));
     }
 
     @Test

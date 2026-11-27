@@ -91,8 +91,7 @@ public class CartService {
     public CartResponse updateCartItemQuantity(String cartId, String variantId, UpdateCartItemRequest request) {
         Cart cart = requireCart(cartId);
         List<CartItem> items = CartServiceUtils.cartItemsOf(cart);
-        CartItem existingItem = CartServiceUtils.findCartItem(items, variantId)
-                .orElseThrow(CartItemNotFoundException::new);
+        CartItem existingItem = requireCartItem(items, variantId);
         ProductVariant variant = requireAvailableVariant(existingItem.variantId());
         Product product = requireAvailableProduct(variant);
         CartServiceUtils.requireStockFor(variant, request.quantity());
@@ -105,8 +104,7 @@ public class CartService {
     public CartResponse removeCartItem(String cartId, String variantId) {
         Cart cart = requireCart(cartId);
         List<CartItem> items = CartServiceUtils.cartItemsOf(cart);
-        CartItem existingItem = CartServiceUtils.findCartItem(items, variantId)
-                .orElseThrow(CartItemNotFoundException::new);
+        CartItem existingItem = requireCartItem(items, variantId);
         List<CartItem> remainingItems = items.stream()
                 .filter(item -> !Objects.equals(item.variantId(), existingItem.variantId()))
                 .toList();
@@ -118,6 +116,14 @@ public class CartService {
                 .filter(id -> CartConstants.CART_ID_PATTERN.matcher(id).matches())
                 .flatMap(cartRepository::findById)
                 .orElseThrow(CartNotFoundException::new);
+    }
+
+    private CartItem requireCartItem(List<CartItem> items, String variantId) {
+        return Optional.ofNullable(variantId)
+                .filter(ObjectId::isValid)
+                .map(validVariantId -> new ObjectId(validVariantId).toHexString())
+                .flatMap(normalizedVariantId -> CartServiceUtils.findCartItem(items, normalizedVariantId))
+                .orElseThrow(CartItemNotFoundException::new);
     }
 
     private ProductVariant requireAvailableVariant(String variantId) {

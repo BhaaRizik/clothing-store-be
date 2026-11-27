@@ -20,6 +20,8 @@ app:
       max-page: 10000
       max-page-size: 50
       default-page-size: 20
+    slug:
+      max-length: 200
   cart:
     max-item-quantity: ${CART_MAX_ITEM_QUANTITY:10}
     inactive-cart-expiry: ${CART_INACTIVE_EXPIRY:30d}

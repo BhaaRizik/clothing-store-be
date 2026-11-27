@@ -28,7 +28,8 @@ class ApplicationProfileConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    @EnableConfigurationProperties({CorsProperties.class, StoreProperties.class, CatalogPaginationProperties.class})
+    @EnableConfigurationProperties({CorsProperties.class, StoreProperties.class, CatalogPaginationProperties.class,
+            CatalogSlugProperties.class})
     static class ApplicationPropertiesConfiguration {
     }
 
@@ -62,6 +63,14 @@ class ApplicationProfileConfigurationTest {
                 "--spring.profiles.active=local")) {
             assertThat(context.getBean(CatalogPaginationProperties.class))
                     .isEqualTo(new CatalogPaginationProperties(10000, 50, 20));
+        }
+    }
+
+    @Test
+    void catalogSlugMaxLengthIsBoundFromApplicationYaml() {
+        try (ConfigurableApplicationContext context = start(ApplicationPropertiesConfiguration.class, Map.of(),
+                "--spring.profiles.active=local")) {
+            assertThat(context.getBean(CatalogSlugProperties.class)).isEqualTo(new CatalogSlugProperties(200));
         }
     }
 

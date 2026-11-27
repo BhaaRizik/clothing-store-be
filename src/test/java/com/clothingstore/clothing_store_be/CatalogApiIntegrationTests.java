@@ -234,6 +234,14 @@ class CatalogApiIntegrationTests {
         assertThat(response.<String>read("$.code")).isEqualTo(code);
     }
 
+    private void assertSlugValidationError(Response response, String field, String rejectedInput) {
+        assertProblem(response, 400, "VALIDATION_ERROR");
+        assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly(field);
+        assertThat(response.<List<String>>read("$.errors[*].message"))
+                .containsExactly("must be a lowercase kebab-case slug of at most 200 characters");
+        assertThat(response.body()).doesNotContain(rejectedInput).doesNotContain("Exception");
+    }
+
     @SuppressWarnings("unchecked")
     private static void collectKeys(Object node, Set<String> into) {
         if (node instanceof Map<?, ?> map) {
@@ -302,15 +310,28 @@ class CatalogApiIntegrationTests {
         }
 
         @ParameterizedTest(name = "slug={0}")
-        @ValueSource(strings = {"archive", "does-not-exist", "MEN"})
-        void inactiveUnknownOrDifferentlyCasedCategoryReturns404(String slug) {
+        @ValueSource(strings = {"archive", "does-not-exist"})
+        void inactiveOrUnknownCategoryReturns404(String slug) {
             assertProblem(get("/api/v1/categories/" + slug), 404, "CATEGORY_NOT_FOUND");
         }
 
         @ParameterizedTest(name = "slug={0}")
         @ValueSource(strings = {".*", "^m", "m.n", "men|women", "{\"$ne\":null}", "{\"$regex\":\".*\"}", "[$ne]"})
-        void slugWithRegexOrOperatorSyntaxIsTreatedLiterally(String slug) {
-            assertProblem(get("/api/v1/categories/" + enc(slug)), 404, "CATEGORY_NOT_FOUND");
+        void slugWithRegexOrOperatorSyntaxIsRejectedAsMalformed(String slug) {
+            assertSlugValidationError(get("/api/v1/categories/" + enc(slug)), "slug", slug);
+        }
+
+        @ParameterizedTest(name = "slug={0}")
+        @ValueSource(strings = {"MEN", "Men", "men_wear", "men wear", "-men", "men--wear"})
+        void malformedSlugReturns400OnSlugField(String slug) {
+            assertSlugValidationError(get("/api/v1/categories/" + enc(slug)), "slug", slug);
+        }
+
+        @Test
+        void slugLongerThanConfiguredMaximumReturns400OnSlugField() {
+            String slug = "m".repeat(201);
+
+            assertSlugValidationError(get("/api/v1/categories/" + slug), "slug", slug);
         }
     }
 
@@ -395,9 +416,23 @@ class CatalogApiIntegrationTests {
         }
 
         @ParameterizedTest(name = "category={0}")
-        @ValueSource(strings = {"archive", "nope", ".*", "{\"$ne\":null}", "{\"$gt\":\"\"}"})
-        void inactiveUnknownOrInjectedCategoryReturns404(String category) {
+        @ValueSource(strings = {"archive", "nope"})
+        void inactiveOrUnknownCategoryReturns404(String category) {
             assertProblem(get("/api/v1/products?category=" + enc(category)), 404, "CATEGORY_NOT_FOUND");
+        }
+
+        @ParameterizedTest(name = "category={0}")
+        @ValueSource(strings = {".*", "{\"$ne\":null}", "{\"$gt\":\"\"}", "MEN", "men_wear", "men wear", "men-",
+                "kids--tops"})
+        void injectedOrMalformedCategoryFilterReturns400OnCategoryField(String category) {
+            assertSlugValidationError(get("/api/v1/products?category=" + enc(category)), "category", category);
+        }
+
+        @Test
+        void categoryFilterLongerThanConfiguredMaximumReturns400OnCategoryField() {
+            String category = "m".repeat(201);
+
+            assertSlugValidationError(get("/api/v1/products?category=" + category), "category", category);
         }
 
         @Test
@@ -714,19 +749,33 @@ class CatalogApiIntegrationTests {
         }
 
         @ParameterizedTest(name = "slug={0}")
-        @ValueSource(strings = {"men-retired", "does-not-exist", "MEN-SHIRT", "men-shirt "})
-        void inactiveUnknownOrNonExactSlugReturns404(String slug) {
+        @ValueSource(strings = {"men-retired", "does-not-exist"})
+        void inactiveOrUnknownSlugReturns404(String slug) {
             assertProblem(get("/api/v1/products/" + enc(slug)), 404, "PRODUCT_NOT_FOUND");
         }
 
         @ParameterizedTest(name = "slug={0}")
         @ValueSource(strings = {".*", "^men", "men-.*", "men-shirt|.*", "{\"$ne\":null}", "{\"$regex\":\"men\"}",
                 "{\"$gt\":\"\"}", "[$ne]"})
-        void noSqlInjectionOrRegexSlugReturns404NotAMatch(String slug) {
+        void noSqlInjectionOrRegexSlugIsRejectedAsMalformedNotAMatch(String slug) {
             Response response = get("/api/v1/products/" + enc(slug));
 
-            assertProblem(response, 404, "PRODUCT_NOT_FOUND");
+            assertSlugValidationError(response, "slug", slug);
             assertThat(response.body()).doesNotContain("men-shirt").doesNotContain("Classic Shirt");
+        }
+
+        @ParameterizedTest(name = "slug={0}")
+        @ValueSource(strings = {"MEN-SHIRT", "men-shirt ", "Men-Shirt", "men_shirt", "men shirt", "men-shirt-",
+                "men--shirt"})
+        void nonExactOrMalformedSlugReturns400OnSlugField(String slug) {
+            assertSlugValidationError(get("/api/v1/products/" + enc(slug)), "slug", slug);
+        }
+
+        @Test
+        void slugLongerThanConfiguredMaximumReturns400OnSlugField() {
+            String slug = "m".repeat(201);
+
+            assertSlugValidationError(get("/api/v1/products/" + slug), "slug", slug);
         }
 
         @Test

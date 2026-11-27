@@ -7,6 +7,7 @@ import com.clothingstore.clothing_store_be.dto.product.ProductCardResponse;
 import com.clothingstore.clothing_store_be.dto.product.ProductDetailsResponse;
 import com.clothingstore.clothing_store_be.mapper.product.ProductSortMapper;
 import com.clothingstore.clothing_store_be.service.product.ProductService;
+import com.clothingstore.clothing_store_be.validation.CatalogSlug;
 import com.clothingstore.clothing_store_be.validation.MaxConfiguredPage;
 import com.clothingstore.clothing_store_be.validation.MaxConfiguredPageSize;
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,12 +46,15 @@ public class ProductController {
     @ApiResponse(responseCode = "200", description = "Page of product cards")
     @ApiResponse(responseCode = "400",
             description = "VALIDATION_ERROR: invalid page (0..${app.catalog.pagination.max-page}), "
-                    + "size (1..${app.catalog.pagination.max-page-size}), sort or featured",
+                    + "size (1..${app.catalog.pagination.max-page-size}), sort, featured or a malformed category slug; "
+                    + "every invalid parameter is listed in errors",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "404", description = "CATEGORY_NOT_FOUND: unknown or inactive category slug",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public PageResponse<ProductCardResponse> listProducts(
-            @Parameter(description = "Active category slug") @RequestParam(required = false) String category,
+            @Parameter(description = "Active category slug: lowercase letters and digits in hyphen-separated words, "
+                    + "at most ${app.catalog.slug.max-length} characters")
+            @RequestParam(required = false) @CatalogSlug String category,
             @Parameter(description = "Filter by featured flag") @RequestParam(required = false) Boolean featured,
             @Parameter(description = "Zero-based page index, 0..${app.catalog.pagination.max-page}")
             @RequestParam(defaultValue = "0") @Min(0) @MaxConfiguredPage int page,
@@ -73,9 +77,14 @@ public class ProductController {
     @ApiResponse(responseCode = "200", description = "Product found, with variants (empty array when none)",
             headers = @Header(name = HttpHeaders.CACHE_CONTROL, description = "no-store",
                     schema = @Schema(type = "string")))
-    @ApiResponse(responseCode = "404", description = "PRODUCT_NOT_FOUND: missing or inactive",
+    @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: malformed slug, reported on field slug",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    public ResponseEntity<ProductDetailsResponse> getProduct(@PathVariable String slug) {
+    @ApiResponse(responseCode = "404", description = "PRODUCT_NOT_FOUND: unknown or inactive slug",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    public ResponseEntity<ProductDetailsResponse> getProduct(
+            @Parameter(description = "Product slug: lowercase letters and digits in hyphen-separated words, "
+                    + "at most ${app.catalog.slug.max-length} characters")
+            @PathVariable @CatalogSlug String slug) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(productService.getProduct(slug));
     }
 }

@@ -423,6 +423,34 @@ class CartServiceTest {
     }
 
     @Test
+    void patchWithUppercaseHexPathVariantIdUpdatesTheStoredLowercaseLine() {
+        Product product = product(PRODUCT_ID, "60.00", null, true);
+        ProductVariant variant = variant(VARIANT_ID, PRODUCT_ID, 4, true);
+        givenCart(cart(item(PRODUCT_ID, VARIANT_ID, 1, "55.00", EARLIER)));
+        givenVariantAndProduct(variant, product);
+        givenCatalog(List.of(product), List.of(variant));
+        saveReturnsArgument();
+
+        cartService.updateCartItemQuantity(CART_ID, VARIANT_ID.toUpperCase(), new UpdateCartItemRequest(3));
+
+        assertThat(savedCart().items()).containsExactly(new CartItem(PRODUCT_ID, VARIANT_ID, 3, new BigDecimal("60.00"), EARLIER));
+    }
+
+    @Test
+    void deleteWithUppercaseHexPathVariantIdRemovesTheStoredLowercaseLine() {
+        Product product = product(PRODUCT_ID, "10.00", null, true);
+        ProductVariant remaining = variant(OTHER_VARIANT_ID, PRODUCT_ID, 5, true);
+        givenCart(cart(item(PRODUCT_ID, VARIANT_ID, 1, "10.00", EARLIER),
+                item(PRODUCT_ID, OTHER_VARIANT_ID, 2, "10.00", EARLIER.plusSeconds(1))));
+        givenCatalog(List.of(product), List.of(remaining));
+        saveReturnsArgument();
+
+        cartService.removeCartItem(CART_ID, VARIANT_ID.toUpperCase());
+
+        assertThat(savedCart().items()).extracting(CartItem::variantId).containsExactly(OTHER_VARIANT_ID);
+    }
+
+    @Test
     void deleteOfLastLineLeavesEmptyCartWithZeroSubtotal() {
         givenCart(cart(item(PRODUCT_ID, VARIANT_ID, 1, "10.00", EARLIER)));
         saveReturnsArgument();
@@ -440,6 +468,28 @@ class CartServiceTest {
 
         assertThatThrownBy(() -> cartService.removeCartItem(CART_ID, variantId))
                 .isInstanceOf(CartItemNotFoundException.class);
+        verify(cartRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "650000000000000000000c0", "650000000000000000000c011", "65000000000000000000zz01",
+            "{\"$ne\":null}"})
+    void malformedPathVariantIdIsItemNotFoundWithoutWritingForPatchAndDelete(String variantId) {
+        givenCart(cart(item(PRODUCT_ID, VARIANT_ID, 1, "10.00", EARLIER)));
+
+        assertThatThrownBy(() -> cartService.updateCartItemQuantity(CART_ID, variantId, new UpdateCartItemRequest(1)))
+                .isInstanceOf(CartItemNotFoundException.class);
+        assertThatThrownBy(() -> cartService.removeCartItem(CART_ID, variantId))
+                .isInstanceOf(CartItemNotFoundException.class);
+        verify(cartRepository, never()).save(any());
+        verifyNoInteractions(productRepository, productVariantRepository);
+    }
+
+    @Test
+    void nullPathVariantIdIsItemNotFoundWithoutWriting() {
+        givenCart(cart(item(PRODUCT_ID, VARIANT_ID, 1, "10.00", EARLIER)));
+
+        assertThatThrownBy(() -> cartService.removeCartItem(CART_ID, null)).isInstanceOf(CartItemNotFoundException.class);
         verify(cartRepository, never()).save(any());
     }
 

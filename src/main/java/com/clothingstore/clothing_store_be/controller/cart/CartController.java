@@ -68,12 +68,15 @@ public class CartController {
                     + "Prices always come from the catalog.")
     @ApiResponse(responseCode = "200", description = "Updated cart")
     @ApiResponse(responseCode = "400",
-            description = "VALIDATION_ERROR: missing header, blank variantId or quantity outside 1..${app.cart.max-item-quantity}",
+            description = "VALIDATION_ERROR: missing header, missing or malformed JSON body, missing variantId or one that "
+                    + "is not 24 hexadecimal characters, or quantity outside 1..${app.cart.max-item-quantity}; "
+                    + "every invalid field is listed in errors",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "404", description = "CART_NOT_FOUND",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409",
-            description = "VARIANT_UNAVAILABLE, CART_ITEM_LIMIT_EXCEEDED (with maxItemQuantity), INSUFFICIENT_STOCK or CART_CONFLICT",
+            description = "VARIANT_UNAVAILABLE (well-formed variantId that is unknown, inactive or out of stock), "
+                    + "CART_ITEM_LIMIT_EXCEEDED (with maxItemQuantity), INSUFFICIENT_STOCK or CART_CONFLICT",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public ResponseEntity<CartResponse> addCartItem(
             @Parameter(description = "Cart id") @RequestHeader(CartConstants.CART_ID_HEADER) String cartId,
@@ -85,15 +88,18 @@ public class CartController {
     @Operation(summary = "Set the quantity of a cart line")
     @ApiResponse(responseCode = "200", description = "Updated cart")
     @ApiResponse(responseCode = "400",
-            description = "VALIDATION_ERROR: missing header or quantity outside 1..${app.cart.max-item-quantity}",
+            description = "VALIDATION_ERROR: missing header, missing or malformed JSON body, "
+                    + "or quantity outside 1..${app.cart.max-item-quantity}",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "CART_NOT_FOUND or CART_ITEM_NOT_FOUND",
+    @ApiResponse(responseCode = "404",
+            description = "CART_NOT_FOUND, or CART_ITEM_NOT_FOUND when the variantId is not in the cart or is not "
+                    + "24 hexadecimal characters",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "VARIANT_UNAVAILABLE, INSUFFICIENT_STOCK or CART_CONFLICT",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public ResponseEntity<CartResponse> updateCartItemQuantity(
             @Parameter(description = "Cart id") @RequestHeader(CartConstants.CART_ID_HEADER) String cartId,
-            @PathVariable String variantId,
+            @Parameter(description = "Product variant id of the cart line") @PathVariable String variantId,
             @Valid @RequestBody UpdateCartItemRequest request) {
         return noStore(cartService.updateCartItemQuantity(cartId, variantId, request));
     }
@@ -103,13 +109,15 @@ public class CartController {
     @ApiResponse(responseCode = "200", description = "Updated cart")
     @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: missing X-Cart-Id header",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "CART_NOT_FOUND or CART_ITEM_NOT_FOUND",
+    @ApiResponse(responseCode = "404",
+            description = "CART_NOT_FOUND, or CART_ITEM_NOT_FOUND when the variantId is not in the cart or is not "
+                    + "24 hexadecimal characters",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "CART_CONFLICT",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public ResponseEntity<CartResponse> removeCartItem(
             @Parameter(description = "Cart id") @RequestHeader(CartConstants.CART_ID_HEADER) String cartId,
-            @PathVariable String variantId) {
+            @Parameter(description = "Product variant id of the cart line") @PathVariable String variantId) {
         return noStore(cartService.removeCartItem(cartId, variantId));
     }
 

@@ -137,9 +137,9 @@ Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for lo
 | Endpoint | Description |
 |---|---|
 | `GET /api/v1/categories` | Active categories, sorted by `displayOrder` and then `name` |
-| `GET /api/v1/categories/{slug}` | One active category. Returns 404 `CATEGORY_NOT_FOUND` if missing. |
-| `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. |
-| `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing. |
+| `GET /api/v1/categories/{slug}` | One active category. Returns 404 `CATEGORY_NOT_FOUND` if missing or inactive, and 400 `VALIDATION_ERROR` (field `slug`) if the slug is malformed. |
+| `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. A malformed `category` returns 400 `VALIDATION_ERROR` (field `category`) and an unknown or inactive one returns 404 `CATEGORY_NOT_FOUND`. |
+| `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing or inactive, and 400 `VALIDATION_ERROR` (field `slug`) if the slug is malformed. |
 | `GET /api/v1/promotions` | Homepage promotions that are live right now, sorted by `displayOrder` and then `title`. Always returns 200 with a JSON array, which is `[]` when there are none. |
 | `POST /api/v1/cart` | Creates an empty guest cart. `201`, `Location: /api/v1/cart`, body is the cart with its new `id`. |
 | `GET /api/v1/cart` | The cart named by the `X-Cart-Id` header, with current prices, availability and subtotal. |
@@ -147,7 +147,18 @@ Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for lo
 | `PATCH /api/v1/cart/items/{variantId}` | Sets the line quantity to `{ quantity }`. |
 | `DELETE /api/v1/cart/items/{variantId}` | Removes the line. |
 
-Money is returned as `{ "amount": "49.90", "currency": "ILS" }`. Errors use RFC 9457 problem details (`application/problem+json`) with a stable `code` (`CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `CART_NOT_FOUND`, `CART_ITEM_NOT_FOUND`, `VARIANT_UNAVAILABLE`, `INSUFFICIENT_STOCK`, `CART_ITEM_LIMIT_EXCEEDED`, `CART_CONFLICT`, `VALIDATION_ERROR`, `INTERNAL_ERROR`). Validation errors also include `errors: [{ field, message }]`.
+Money is returned as `{ "amount": "49.90", "currency": "ILS" }`. Errors use RFC 9457 problem details (`application/problem+json`) with `type`, `title`, `status`, `detail` and a stable `code`. The codes are:
+
+- Domain: `CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `CART_NOT_FOUND`, `CART_ITEM_NOT_FOUND`, `VARIANT_UNAVAILABLE`, `INSUFFICIENT_STOCK`, `CART_ITEM_LIMIT_EXCEEDED`, `CART_CONFLICT`.
+- Request and framework: `VALIDATION_ERROR`, `ROUTE_NOT_FOUND` (404), `METHOD_NOT_ALLOWED` (405), `NOT_ACCEPTABLE` (406), `UNSUPPORTED_MEDIA_TYPE` (415).
+- Server: `INTERNAL_ERROR` (500) and `SERVICE_UNAVAILABLE` (503 when MongoDB is unreachable).
+
+Validation errors also include `errors: [{ field, message }]`.
+
+Input formats:
+
+- Category and product slugs (path and the `category` filter) must be lowercase kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`) of at most `app.catalog.slug.max-length` (200) characters. A malformed slug is rejected with 400 `VALIDATION_ERROR` on field `slug` or `category`, without a database query. A well-formed slug that does not exist returns 404 `CATEGORY_NOT_FOUND` or `PRODUCT_NOT_FOUND`.
+- Variant ids are 24-character hexadecimal MongoDB ids.
 
 ### Product details and variants
 
@@ -252,10 +263,10 @@ Errors:
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | `X-Cart-Id` header missing (`field: "X-Cart-Id"`), blank `variantId`, `quantity` missing or not a JSON integer (`1.5`, `"2"` and `true` are rejected), `quantity` below 1 or above `CART_MAX_ITEM_QUANTITY`, malformed JSON. Range errors on `quantity` carry the message `Quantity must be between 1 and <max>.` with the configured maximum filled in, so the frontend can show it as is; type errors carry `must be a valid integer`. |
+| 400 | `VALIDATION_ERROR` | `X-Cart-Id` header missing (`field: "X-Cart-Id"`), `variantId` missing or not a 24-character hexadecimal id (`must be a valid product variant id`), `quantity` missing or not a JSON integer (`1.5`, `"2"` and `true` are rejected), `quantity` below 1 or above `CART_MAX_ITEM_QUANTITY`, malformed JSON. Range errors on `quantity` carry the message `Quantity must be between 1 and <max>.` with the configured maximum filled in, so the frontend can show it as is; type errors carry `must be a valid integer`. |
 | 404 | `CART_NOT_FOUND` | Cart id unknown, expired or not a UUID (the same response for all three) |
-| 404 | `CART_ITEM_NOT_FOUND` | `PATCH`/`DELETE` of a variant that is not in the cart |
-| 409 | `VARIANT_UNAVAILABLE` | Add or `PATCH` of a variant that is unknown, inactive, out of stock or whose product is missing or inactive |
+| 404 | `CART_ITEM_NOT_FOUND` | `PATCH`/`DELETE` of a variant that is not in the cart, or whose path id is malformed |
+| 409 | `VARIANT_UNAVAILABLE` | Add or `PATCH` of a well-formed variant id that is unknown, inactive, out of stock or whose product is missing or inactive |
 | 409 | `CART_ITEM_LIMIT_EXCEEDED` | Adding would take the line above `CART_MAX_ITEM_QUANTITY`; the problem has a `maxItemQuantity` property |
 | 409 | `INSUFFICIENT_STOCK` | The resulting quantity is above the variant stock |
 | 409 | `CART_CONFLICT` | The cart was changed by another request at the same time (optimistic locking); reload and retry |

@@ -64,7 +64,7 @@ Values above a maximum return `400 VALIDATION_ERROR` with, for example, `errors:
 
 ### Cart limits
 
-`app.cart` in `application.yaml` is bound to `CartProperties`. Both keys have defaults (`10` and `30d`), so profile files do not need to set them. At startup the backend creates the TTL index `ttl_carts_updated_at` on `carts.updatedAt` with the configured expiry; when `CART_INACTIVE_EXPIRY` changes, the existing index is updated in place (`collMod`) on the next start. MongoDB's TTL monitor runs about once a minute, so expired carts can live slightly longer than the expiry.
+`app.cart` in `application.yaml` is bound to `CartProperties`. Both keys have defaults (`10` and `30d`), so profile files do not need to set them. At startup the backend creates the TTL index `ttl_carts_updated_at` on `carts.updatedAt` with the configured expiry; when `CART_INACTIVE_EXPIRY` changes, the existing index is updated in place (`collMod`) on the next start. The deletion itself is done by MongoDB's TTL monitor inside the database server (Atlas included), not by the backend: once the index exists, expired carts are removed even while the app is stopped, so no scheduled job is needed. The monitor runs about once a minute, so expired carts can live slightly longer than the expiry. The index appears on a database the first time the backend starts against it.
 
 ## Running locally
 

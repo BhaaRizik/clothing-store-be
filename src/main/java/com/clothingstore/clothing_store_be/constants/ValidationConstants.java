@@ -17,6 +17,10 @@ public final class ValidationConstants {
             + ProductSortParameters.NAME + ", " + ProductSortParameters.PRICE_ASC + ", " + ProductSortParameters.PRICE_DESC;
     public static final String CATALOG_SLUG_REGEX = "[a-z0-9]+(-[a-z0-9]+)*";
     public static final Pattern CATALOG_SLUG_PATTERN = Pattern.compile(CATALOG_SLUG_REGEX);
+    public static final String CATALOG_SLUG_MESSAGE =
+            "must be a lowercase kebab-case slug of at most the configured maximum length";
+    public static final String CATALOG_SLUG_MESSAGE_FORMAT =
+            "must be a lowercase kebab-case slug of at most %d characters";
     public static final String OBJECT_ID_REGEX = "[0-9a-fA-F]{24}";
     public static final String VARIANT_ID_FORMAT_MESSAGE = "must be a valid product variant id";
     public static final String MAX_VALUE_MESSAGE = "must be less than or equal to the configured maximum";

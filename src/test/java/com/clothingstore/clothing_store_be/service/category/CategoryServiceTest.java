@@ -1,18 +1,13 @@
 package com.clothingstore.clothing_store_be.service.category;
 
-import com.clothingstore.clothing_store_be.config.CatalogSlugProperties;
 import com.clothingstore.clothing_store_be.dto.category.CategoryResponse;
 import com.clothingstore.clothing_store_be.exception.category.CategoryNotFoundException;
 import com.clothingstore.clothing_store_be.mapper.category.CategoryMapperImpl;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.repository.category.CategoryRepository;
-import com.clothingstore.clothing_store_be.validation.CatalogSlugValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -23,7 +18,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,8 +30,7 @@ class CategoryServiceTest {
 
     @BeforeEach
     void createService() {
-        categoryService = new CategoryService(categoryRepository, new CategoryMapperImpl(),
-                new CatalogSlugValidator(new CatalogSlugProperties(20)));
+        categoryService = new CategoryService(categoryRepository, new CategoryMapperImpl());
     }
 
     static Category category(String slug, int order) {
@@ -70,25 +63,6 @@ class CategoryServiceTest {
 
         assertThatThrownBy(() -> categoryService.getActiveCategory("archive"))
                 .isInstanceOf(CategoryNotFoundException.class);
-    }
-
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"MEN", "Men", "men_shirts", "men shirts", "-men", "men-", "men--shirts", "men.shirts",
-            "men/shirts", "men%00", "a23456789012345678901"})
-    void malformedSlugIsNotFoundWithoutQueryingRepository(String slug) {
-        assertThatThrownBy(() -> categoryService.getActiveCategory(slug)).isInstanceOf(CategoryNotFoundException.class);
-        assertThatThrownBy(() -> categoryService.requireActiveCategory(slug))
-                .isInstanceOf(CategoryNotFoundException.class);
-        verifyNoInteractions(categoryRepository);
-    }
-
-    @Test
-    void slugAtConfiguredMaximumLengthIsLookedUp() {
-        String slug = "a2345678901234567890";
-        when(categoryRepository.findBySlugAndActiveTrue(slug)).thenReturn(Optional.of(category(slug, 1)));
-
-        assertThat(categoryService.getActiveCategory(slug).slug()).isEqualTo(slug);
     }
 
     @Test

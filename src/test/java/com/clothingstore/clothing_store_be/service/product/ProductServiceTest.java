@@ -1,6 +1,5 @@
 package com.clothingstore.clothing_store_be.service.product;
 
-import com.clothingstore.clothing_store_be.config.CatalogSlugProperties;
 import com.clothingstore.clothing_store_be.config.StoreProperties;
 import com.clothingstore.clothing_store_be.dto.category.CategoryReferenceResponse;
 import com.clothingstore.clothing_store_be.dto.common.ImageResponse;
@@ -27,14 +26,11 @@ import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import com.clothingstore.clothing_store_be.repository.product.ProductRepository;
 import com.clothingstore.clothing_store_be.repository.product.ProductVariantRepository;
 import com.clothingstore.clothing_store_be.service.category.CategoryService;
-import com.clothingstore.clothing_store_be.validation.CatalogSlugValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -73,7 +69,7 @@ class ProductServiceTest {
         ProductMapperImpl productMapper = new ProductMapperImpl(new MoneyMapperImpl(), new ProductImageMapperImpl(),
                 new CategoryMapperImpl(), new ProductVariantMapperImpl());
         productService = new ProductService(productRepository, productVariantRepository, categoryService, productMapper,
-                new StoreProperties("ILS"), new CatalogSlugValidator(new CatalogSlugProperties(20)));
+                new StoreProperties("ILS"));
     }
 
     static Product product(String slug, List<ProductImage> images, String basePrice, String salePrice) {
@@ -196,23 +192,5 @@ class ProductServiceTest {
 
         assertThatThrownBy(() -> productService.getProduct("gone")).isInstanceOf(ProductNotFoundException.class);
         verifyNoInteractions(productVariantRepository);
-    }
-
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"Shirt", "SHIRT", "men_shirt", "men shirt", "-shirt", "shirt-", "men--shirt", "../shirt",
-            "{\"$ne\":null}", "a23456789012345678901"})
-    void malformedProductSlugIsNotFoundWithoutQueryingRepositories(String slug) {
-        assertThatThrownBy(() -> productService.getProduct(slug)).isInstanceOf(ProductNotFoundException.class);
-        verifyNoInteractions(productRepository, productVariantRepository, categoryService);
-    }
-
-    @Test
-    void productSlugAtConfiguredMaximumLengthIsLookedUp() {
-        String slug = "a2345678901234567890";
-        when(productRepository.findBySlugAndActiveTrue(slug)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> productService.getProduct(slug)).isInstanceOf(ProductNotFoundException.class);
-        verify(productRepository).findBySlugAndActiveTrue(slug);
     }
 }

@@ -14,7 +14,6 @@ import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import com.clothingstore.clothing_store_be.repository.product.ProductRepository;
 import com.clothingstore.clothing_store_be.repository.product.ProductVariantRepository;
 import com.clothingstore.clothing_store_be.service.category.CategoryService;
-import com.clothingstore.clothing_store_be.validation.CatalogSlugValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -31,7 +30,6 @@ public class ProductService {
     private final CategoryService categoryService;
     private final ProductMapper productMapper;
     private final StoreProperties storeProperties;
-    private final CatalogSlugValidator catalogSlugValidator;
 
     public PageResponse<ProductCardResponse> listProducts(String categorySlug, Boolean featured, int page, int size,
             ProductSort sort) {
@@ -44,10 +42,7 @@ public class ProductService {
     }
 
     public ProductDetailsResponse getProduct(String slug) {
-        Product product = Optional.ofNullable(slug)
-                .filter(catalogSlugValidator::isValidCatalogSlug)
-                .flatMap(productRepository::findBySlugAndActiveTrue)
-                .orElseThrow(ProductNotFoundException::new);
+        Product product = productRepository.findBySlugAndActiveTrue(slug).orElseThrow(ProductNotFoundException::new);
         Category category = categoryService.findCategoryById(product.categoryId())
                 .orElseThrow(() -> new IllegalStateException(
                         ErrorMessages.MISSING_PRODUCT_CATEGORY_FORMAT.formatted(product.id())));

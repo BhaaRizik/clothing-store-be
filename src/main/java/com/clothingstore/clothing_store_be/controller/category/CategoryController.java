@@ -2,6 +2,7 @@ package com.clothingstore.clothing_store_be.controller.category;
 
 import com.clothingstore.clothing_store_be.dto.category.CategoryResponse;
 import com.clothingstore.clothing_store_be.service.category.CategoryService;
+import com.clothingstore.clothing_store_be.validation.CatalogSlug;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -37,12 +38,14 @@ public class CategoryController {
     @GetMapping("/{slug}")
     @Operation(summary = "Get an active category by slug")
     @ApiResponse(responseCode = "200", description = "Category found")
-    @ApiResponse(responseCode = "404", description = "CATEGORY_NOT_FOUND: missing, inactive or malformed slug",
+    @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: malformed slug, reported on field slug",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "CATEGORY_NOT_FOUND: unknown or inactive slug",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public CategoryResponse getCategory(
             @Parameter(description = "Category slug: lowercase letters and digits in hyphen-separated words, "
                     + "at most ${app.catalog.slug.max-length} characters")
-            @PathVariable String slug) {
+            @PathVariable @CatalogSlug String slug) {
         return categoryService.getActiveCategory(slug);
     }
 }

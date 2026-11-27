@@ -137,9 +137,9 @@ Conventions: Lombok `@RequiredArgsConstructor` for injection and `@Slf4j` for lo
 | Endpoint | Description |
 |---|---|
 | `GET /api/v1/categories` | Active categories, sorted by `displayOrder` and then `name` |
-| `GET /api/v1/categories/{slug}` | One active category. Returns 404 `CATEGORY_NOT_FOUND` if missing or if the slug is malformed. |
-| `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. |
-| `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing or if the slug is malformed. |
+| `GET /api/v1/categories/{slug}` | One active category. Returns 404 `CATEGORY_NOT_FOUND` if missing or inactive, and 400 `VALIDATION_ERROR` (field `slug`) if the slug is malformed. |
+| `GET /api/v1/products?category=&featured=&page=0&size=20&sort=newest` | Paginated active product cards. `page` is 0..`max-page` (10000) and `size` is 1..`max-page-size` (50), with `size` defaulting to `default-page-size` (20). `sort` is one of `newest`, `name`, `price_asc`, `price_desc`. A malformed `category` returns 400 `VALIDATION_ERROR` (field `category`) and an unknown or inactive one returns 404 `CATEGORY_NOT_FOUND`. |
+| `GET /api/v1/products/{slug}` | Details of one active product, including its active `variants`. Sent with `Cache-Control: no-store`. Returns 404 `PRODUCT_NOT_FOUND` if missing or inactive, and 400 `VALIDATION_ERROR` (field `slug`) if the slug is malformed. |
 | `GET /api/v1/promotions` | Homepage promotions that are live right now, sorted by `displayOrder` and then `title`. Always returns 200 with a JSON array, which is `[]` when there are none. |
 | `POST /api/v1/cart` | Creates an empty guest cart. `201`, `Location: /api/v1/cart`, body is the cart with its new `id`. |
 | `GET /api/v1/cart` | The cart named by the `X-Cart-Id` header, with current prices, availability and subtotal. |
@@ -157,7 +157,7 @@ Validation errors also include `errors: [{ field, message }]`.
 
 Input formats:
 
-- Category and product slugs (path and the `category` filter) must be lowercase kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`) of at most `app.catalog.slug.max-length` (200) characters. A malformed slug gets the same 404 as an unknown one, without a database query.
+- Category and product slugs (path and the `category` filter) must be lowercase kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`) of at most `app.catalog.slug.max-length` (200) characters. A malformed slug is rejected with 400 `VALIDATION_ERROR` on field `slug` or `category`, without a database query. A well-formed slug that does not exist returns 404 `CATEGORY_NOT_FOUND` or `PRODUCT_NOT_FOUND`.
 - Variant ids are 24-character hexadecimal MongoDB ids.
 
 ### Product details and variants

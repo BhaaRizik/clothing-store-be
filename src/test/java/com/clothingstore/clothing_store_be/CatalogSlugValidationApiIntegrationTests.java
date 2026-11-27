@@ -78,16 +78,14 @@ class CatalogSlugValidationApiIntegrationTests {
         return new CartApiTestClient(port).sendWithHeaders("GET", pathAndQuery, null);
     }
 
-    private static void assertNotFound(CartApiTestResponse response, String code) {
-        assertThat(response.status()).as(response.body()).isEqualTo(404);
+    private static void assertSlugValidationError(CartApiTestResponse response, String field) {
+        assertThat(response.status()).as(response.body()).isEqualTo(400);
         assertThat(response.header("Content-Type")).startsWith("application/problem+json");
-        assertThat(response.<String>read("$.code")).isEqualTo(code);
+        assertThat(response.<String>read("$.code")).isEqualTo("VALIDATION_ERROR");
+        assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly(field);
+        assertThat(response.<List<String>>read("$.errors[*].message"))
+                .containsExactly("must be a lowercase kebab-case slug of at most 200 characters");
         assertThat(response.body()).doesNotContain("Exception").doesNotContain("java.").doesNotContain("Hidden");
-    }
-
-    private static void assertSameProblem(CartApiTestResponse malformed, CartApiTestResponse unknown) {
-        assertThat(malformed.status()).isEqualTo(unknown.status());
-        assertThat(malformed.body()).isEqualTo(unknown.body());
     }
 
     @Test
@@ -99,8 +97,11 @@ class CatalogSlugValidationApiIntegrationTests {
     }
 
     @Test
-    void storedCategorySlugOneCharacterOverMaximumIsNotFound() {
-        assertNotFound(get("/api/v1/categories/" + TOO_LONG_SLUG), "CATEGORY_NOT_FOUND");
+    void storedCategorySlugOneCharacterOverMaximumIsRejectedAsMalformed() {
+        CartApiTestResponse response = get("/api/v1/categories/" + TOO_LONG_SLUG);
+
+        assertSlugValidationError(response, "slug");
+        assertThat(response.body()).doesNotContain(TOO_LONG_SLUG);
     }
 
     @Test
@@ -112,8 +113,11 @@ class CatalogSlugValidationApiIntegrationTests {
     }
 
     @Test
-    void storedProductSlugOneCharacterOverMaximumIsNotFound() {
-        assertNotFound(get("/api/v1/products/" + TOO_LONG_SLUG), "PRODUCT_NOT_FOUND");
+    void storedProductSlugOneCharacterOverMaximumIsRejectedAsMalformed() {
+        CartApiTestResponse response = get("/api/v1/products/" + TOO_LONG_SLUG);
+
+        assertSlugValidationError(response, "slug");
+        assertThat(response.body()).doesNotContain(TOO_LONG_SLUG);
     }
 
     @Test
@@ -125,26 +129,29 @@ class CatalogSlugValidationApiIntegrationTests {
     }
 
     @Test
-    void storedCategoryFilterOneCharacterOverMaximumIsNotFound() {
-        assertNotFound(get("/api/v1/products?category=" + TOO_LONG_SLUG), "CATEGORY_NOT_FOUND");
+    void storedCategoryFilterOneCharacterOverMaximumIsRejectedAsMalformed() {
+        CartApiTestResponse response = get("/api/v1/products?category=" + TOO_LONG_SLUG);
+
+        assertSlugValidationError(response, "category");
+        assertThat(response.body()).doesNotContain(TOO_LONG_SLUG);
     }
 
     @Test
     void storedSlugsThatAreNotLowercaseKebabCaseAreNeverServed() {
         for (String slug : List.of(MIXED_CASE_SLUG, "m%C3%A9n")) {
-            assertNotFound(get("/api/v1/categories/" + slug), "CATEGORY_NOT_FOUND");
-            assertNotFound(get("/api/v1/products/" + slug), "PRODUCT_NOT_FOUND");
-            assertNotFound(get("/api/v1/products?category=" + slug), "CATEGORY_NOT_FOUND");
+            assertSlugValidationError(get("/api/v1/categories/" + slug), "slug");
+            assertSlugValidationError(get("/api/v1/products/" + slug), "slug");
+            assertSlugValidationError(get("/api/v1/products?category=" + slug), "category");
         }
     }
 
     @ParameterizedTest(name = "encoded={0}")
     @ValueSource(strings = {"m%C3%A9n", "%EF%BD%8Den", "%D9%A3", "men%E2%80%8B", "men%09", "men%0A", "men%0D%0A",
             "%20men", "men%2Eshirt", "men%2Bshirt", "men%25", "%C4%B1", "a%CC%81"})
-    void percentEncodedNonKebabCaseSlugReturnsSameProblemAsUnknownSlug(String encodedSlug) {
-        assertSameProblem(get("/api/v1/categories/" + encodedSlug), get("/api/v1/categories/does-not-exist"));
-        assertSameProblem(get("/api/v1/products/" + encodedSlug), get("/api/v1/products/does-not-exist"));
-        assertSameProblem(get("/api/v1/products?category=" + encodedSlug), get("/api/v1/products?category=nope"));
+    void percentEncodedNonKebabCaseSlugReturns400OnSlugOrCategoryField(String encodedSlug) {
+        assertSlugValidationError(get("/api/v1/categories/" + encodedSlug), "slug");
+        assertSlugValidationError(get("/api/v1/products/" + encodedSlug), "slug");
+        assertSlugValidationError(get("/api/v1/products?category=" + encodedSlug), "category");
     }
 
     @ParameterizedTest(name = "encoded={0}")
@@ -161,26 +168,26 @@ class CatalogSlugValidationApiIntegrationTests {
 
     @ParameterizedTest(name = "category={0}")
     @ValueSource(strings = {"Mixed-Case", "m%C3%A9n", "men_wear", ""})
-    void malformedCategoryFilterCombinedWithValidFiltersReturnsSameProblemAsUnknownCategory(String category) {
+    void malformedCategoryFilterCombinedWithValidFiltersReturns400OnlyOnCategoryField(String category) {
         String filters = "&featured=true&sort=price_asc&page=0&size=5";
 
-        assertSameProblem(get("/api/v1/products?category=" + category + filters),
-                get("/api/v1/products?category=nope" + filters));
+        assertSlugValidationError(get("/api/v1/products?category=" + category + filters), "category");
     }
 
     @Test
-    void invalidPaginationIsReportedBeforeMalformedCategoryAndOnlyNamesThePaginationFields() {
+    void malformedCategoryAndInvalidPaginationAreAllReported() {
         CartApiTestResponse response = get("/api/v1/products?category=Mixed-Case&page=-1&size=0");
 
         assertThat(response.status()).isEqualTo(400);
         assertThat(response.<String>read("$.code")).isEqualTo("VALIDATION_ERROR");
-        assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly("page", "size");
+        assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly("category", "page", "size");
+        assertThat(response.body()).doesNotContain("Mixed-Case").doesNotContain("Hidden");
     }
 
     @Test
-    void repeatedCategoryParameterIsNotFoundRatherThanMatchingEitherValue() {
-        assertNotFound(get("/api/v1/products?category=" + MAX_LENGTH_SLUG + "&category=" + MAX_LENGTH_SLUG),
-                "CATEGORY_NOT_FOUND");
+    void repeatedCategoryParameterIsRejectedRatherThanMatchingEitherValue() {
+        assertSlugValidationError(get("/api/v1/products?category=" + MAX_LENGTH_SLUG + "&category=" + MAX_LENGTH_SLUG),
+                "category");
     }
 
     @Test

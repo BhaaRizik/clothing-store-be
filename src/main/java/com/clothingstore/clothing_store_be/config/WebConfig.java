@@ -18,8 +18,8 @@ import tools.jackson.databind.type.LogicalType;
 @Configuration
 @RequiredArgsConstructor
 @Import(ProblemDetailFactory.class)
-@EnableConfigurationProperties({CorsProperties.class, CatalogPaginationProperties.class, CartProperties.class,
-        ErrorProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, CatalogPaginationProperties.class, CatalogSlugProperties.class,
+        CartProperties.class, ErrorProperties.class})
 public class WebConfig implements WebMvcConfigurer {
 
     private final CorsProperties corsProperties;

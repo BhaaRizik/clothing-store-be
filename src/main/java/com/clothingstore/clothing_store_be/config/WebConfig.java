@@ -1,6 +1,7 @@
 package com.clothingstore.clothing_store_be.config;
 
 import com.clothingstore.clothing_store_be.constants.CartConstants;
+import com.clothingstore.clothing_store_be.exception.common.ProblemDetailFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
@@ -19,6 +20,11 @@ import tools.jackson.databind.type.LogicalType;
 public class WebConfig implements WebMvcConfigurer {
 
     private final CorsProperties corsProperties;
+
+    @Bean
+    ProblemDetailFactory problemDetailFactory() {
+        return new ProblemDetailFactory();
+    }
 
     @Bean
     JsonMapperBuilderCustomizer strictIntegerInputCustomizer() {

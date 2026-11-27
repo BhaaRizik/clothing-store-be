@@ -23,6 +23,7 @@ import com.clothingstore.clothing_store_be.model.product.ProductVariant;
 import com.clothingstore.clothing_store_be.repository.cart.CartRepository;
 import com.clothingstore.clothing_store_be.repository.product.ProductRepository;
 import com.clothingstore.clothing_store_be.repository.product.ProductVariantRepository;
+import com.clothingstore.clothing_store_be.util.CartServiceUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;

@@ -1,4 +1,4 @@
-package com.clothingstore.clothing_store_be.service.cart;
+package com.clothingstore.clothing_store_be.util;
 
 import com.clothingstore.clothing_store_be.constants.MoneyConstants;
 import com.clothingstore.clothing_store_be.exception.cart.InsufficientStockException;

@@ -273,12 +273,130 @@ class CartApiIntegrationTests {
     void malformedVariantIdsNeverCauseServerErrors() {
         String cartId = createCart();
 
-        assertProblem(send("POST", "/api/v1/cart/items", "{\"variantId\":\"not-an-id\",\"quantity\":1}",
-                "X-Cart-Id", cartId), 409, "VARIANT_UNAVAILABLE");
+        CartApiTestResponse added = send("POST", "/api/v1/cart/items", "{\"variantId\":\"not-an-id\",\"quantity\":1}",
+                "X-Cart-Id", cartId);
+        assertProblem(added, 400, "VALIDATION_ERROR");
+        assertThat(added.<String>read("$.errors[0].field")).isEqualTo("variantId");
         assertProblem(send("PATCH", "/api/v1/cart/items/not-an-id", "{\"quantity\":1}", "X-Cart-Id", cartId),
                 404, "CART_ITEM_NOT_FOUND");
         assertProblem(send("DELETE", "/api/v1/cart/items/not-an-id", null, "X-Cart-Id", cartId),
                 404, "CART_ITEM_NOT_FOUND");
+    }
+
+    @Test
+    void rejectedCartRequestsLeaveStoredCartUnchanged() {
+        String cartId = createCart();
+        addItem(cartId, SHIRT_BLUE_M, 2);
+        addItem(cartId, SHIRT_WHITE_L, 1);
+        Document before = storedCart(cartId);
+        String blueItemPath = "/api/v1/cart/items/" + SHIRT_BLUE_M.toHexString();
+        String validAddBody = "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString() + "\",\"quantity\":1}";
+        List<RejectedCartRequest> rejectedRequests = List.of(
+                new RejectedCartRequest("POST", "/api/v1/cart/items", "{\"variantId\":\"not-an-id\",\"quantity\":1}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString().substring(1) + "\",\"quantity\":1}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", "{\"variantId\":\"not-an-id\",\"quantity\":0}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString() + "\",\"quantity\":0}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString() + "\",\"quantity\":11}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString() + "\",\"quantity\":\"two\"}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":[\"" + SHIRT_BLUE_M.toHexString() + "\"],\"quantity\":1}",
+                        cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", "", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", "{\"variantId\":", cartId, 400,
+                        "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", "{}", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + SHIRT_SOLD_OUT.toHexString() + "\",\"quantity\":1}",
+                        cartId, 409, "VARIANT_UNAVAILABLE"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items",
+                        "{\"variantId\":\"" + new ObjectId().toHexString() + "\",\"quantity\":1}",
+                        cartId, 409, "VARIANT_UNAVAILABLE"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", validAddBody,
+                        UUID.randomUUID().toString(), 404, "CART_NOT_FOUND"),
+                new RejectedCartRequest("POST", "/api/v1/cart/items", validAddBody, "not-a-uuid", 404,
+                        "CART_NOT_FOUND"),
+                new RejectedCartRequest("PATCH", "/api/v1/cart/items/not-an-id", "{\"quantity\":1}", cartId, 404,
+                        "CART_ITEM_NOT_FOUND"),
+                new RejectedCartRequest("PATCH", "/api/v1/cart/items/" + new ObjectId().toHexString(),
+                        "{\"quantity\":1}", cartId, 404, "CART_ITEM_NOT_FOUND"),
+                new RejectedCartRequest("PATCH", blueItemPath, "{\"quantity\":0}", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("PATCH", blueItemPath, "{\"quantity\":11}", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("PATCH", blueItemPath, "{\"quantity\":1.5}", cartId, 400,
+                        "VALIDATION_ERROR"),
+                new RejectedCartRequest("PATCH", blueItemPath, "", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("PATCH", blueItemPath, "{\"quantity\":", cartId, 400, "VALIDATION_ERROR"),
+                new RejectedCartRequest("PATCH", blueItemPath, "{\"quantity\":1}", UUID.randomUUID().toString(),
+                        404, "CART_NOT_FOUND"),
+                new RejectedCartRequest("DELETE", "/api/v1/cart/items/not-an-id", null, cartId, 404,
+                        "CART_ITEM_NOT_FOUND"),
+                new RejectedCartRequest("DELETE", "/api/v1/cart/items/" + SHIRT_SOLD_OUT.toHexString(), null, cartId,
+                        404, "CART_ITEM_NOT_FOUND"),
+                new RejectedCartRequest("DELETE", blueItemPath, null, UUID.randomUUID().toString(), 404,
+                        "CART_NOT_FOUND"));
+
+        for (RejectedCartRequest rejected : rejectedRequests) {
+            CartApiTestResponse response = send(rejected.method(), rejected.path(), rejected.body(),
+                    "X-Cart-Id", rejected.cartId());
+
+            assertThat(response.status()).as(rejected.toString()).isEqualTo(rejected.expectedStatus());
+            assertThat(response.<String>read("$.code")).as(rejected.toString()).isEqualTo(rejected.expectedCode());
+            assertThat(storedCart(cartId)).as(rejected.toString()).isEqualTo(before);
+        }
+        assertThat(mongoTemplate.getCollection("carts").countDocuments()).isEqualTo(1);
+    }
+
+    @Test
+    void everyInvalidFieldIsReportedWithoutEchoingInput() {
+        String cartId = createCart();
+
+        CartApiTestResponse response = cartApi().addItemWithBody(cartId,
+                "{\"variantId\":\"<b>injected</b>\",\"quantity\":99}");
+
+        assertProblem(response, 400, "VALIDATION_ERROR");
+        assertThat(response.<List<String>>read("$.errors[*].field")).containsExactly("quantity", "variantId");
+        assertThat(response.<List<String>>read("$.errors[*].message"))
+                .containsExactly("Quantity must be between 1 and 10.", "must be a valid product variant id");
+        assertThat(response.body()).doesNotContain("injected").doesNotContain("Exception");
+    }
+
+    @Test
+    void clientPriceAndTotalFieldsInBodyAreIgnored() {
+        String cartId = createCart();
+
+        CartApiTestResponse added = cartApi().addItemWithBody(cartId, "{\"variantId\":\"" + SHIRT_BLUE_M.toHexString()
+                + "\",\"quantity\":2,\"price\":\"0.01\",\"unitPrice\":{\"amount\":\"0.01\",\"currency\":\"ILS\"},"
+                + "\"unitPriceSnapshot\":0.01,\"lineTotal\":\"0.02\",\"subtotal\":0,\"total\":0,"
+                + "\"productId\":\"" + new ObjectId().toHexString() + "\"}");
+        CartApiTestResponse patched = cartApi().updateQuantityWithBody(cartId, SHIRT_BLUE_M.toHexString(),
+                "{\"quantity\":3,\"unitPrice\":\"0.01\",\"lineTotal\":\"0.03\",\"subtotal\":\"0.03\"}");
+
+        assertThat(added.status()).isEqualTo(200);
+        assertThat(added.<String>read("$.items[0].unitPrice.amount")).isEqualTo("40.00");
+        assertThat(added.<String>read("$.items[0].lineTotal.amount")).isEqualTo("80.00");
+        assertThat(added.<String>read("$.items[0].productId")).isEqualTo(SHIRT.toHexString());
+        assertThat(added.<String>read("$.subtotal.amount")).isEqualTo("80.00");
+        assertThat(patched.status()).isEqualTo(200);
+        assertThat(patched.<String>read("$.items[0].lineTotal.amount")).isEqualTo("120.00");
+        assertThat(patched.<String>read("$.subtotal.amount")).isEqualTo("120.00");
+        Document item = storedCart(cartId).getList("items", Document.class).getFirst();
+        assertThat(item.get("unitPriceSnapshot")).isEqualTo(Decimal128.parse("40.00"));
+        assertThat(item.get("productId")).isEqualTo(SHIRT);
+        assertThat(item.keySet()).containsExactlyInAnyOrder("productId", "variantId", "quantity", "unitPriceSnapshot",
+                "addedAt");
+    }
+
+    private Document storedCart(String cartId) {
+        return mongoTemplate.getCollection("carts").find(new Document("_id", cartId)).first();
     }
 
     @Test

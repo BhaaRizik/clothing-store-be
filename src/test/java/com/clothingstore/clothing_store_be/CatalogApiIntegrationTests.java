@@ -234,6 +234,14 @@ class CatalogApiIntegrationTests {
         assertThat(response.<String>read("$.code")).isEqualTo(code);
     }
 
+    private void assertSameProblem(Response malformed, Response unknown) {
+        assertThat(malformed.status()).isEqualTo(unknown.status()).isEqualTo(404);
+        assertThat(malformed.contentType()).isEqualTo(unknown.contentType());
+        for (String field : List.of("$.title", "$.status", "$.detail", "$.code")) {
+            assertThat(malformed.<Object>read(field)).as(field).isEqualTo(unknown.read(field));
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static void collectKeys(Object node, Set<String> into) {
         if (node instanceof Map<?, ?> map) {
@@ -311,6 +319,13 @@ class CatalogApiIntegrationTests {
         @ValueSource(strings = {".*", "^m", "m.n", "men|women", "{\"$ne\":null}", "{\"$regex\":\".*\"}", "[$ne]"})
         void slugWithRegexOrOperatorSyntaxIsTreatedLiterally(String slug) {
             assertProblem(get("/api/v1/categories/" + enc(slug)), 404, "CATEGORY_NOT_FOUND");
+        }
+
+        @ParameterizedTest(name = "slug={0}")
+        @ValueSource(strings = {"Men", "men_wear", "men wear", "-men", "men--wear"})
+        void malformedSlugReturnsSameProblemAsUnknownSlug(String slug) {
+            assertSameProblem(get("/api/v1/categories/" + enc(slug)), get("/api/v1/categories/does-not-exist"));
+            assertSameProblem(get("/api/v1/categories/" + "m".repeat(201)), get("/api/v1/categories/does-not-exist"));
         }
     }
 
@@ -398,6 +413,12 @@ class CatalogApiIntegrationTests {
         @ValueSource(strings = {"archive", "nope", ".*", "{\"$ne\":null}", "{\"$gt\":\"\"}"})
         void inactiveUnknownOrInjectedCategoryReturns404(String category) {
             assertProblem(get("/api/v1/products?category=" + enc(category)), 404, "CATEGORY_NOT_FOUND");
+        }
+
+        @ParameterizedTest(name = "category={0}")
+        @ValueSource(strings = {"MEN", "men_wear", "men wear", "men-", "kids--tops"})
+        void malformedCategoryFilterReturnsSameProblemAsUnknownCategory(String category) {
+            assertSameProblem(get("/api/v1/products?category=" + enc(category)), get("/api/v1/products?category=nope"));
         }
 
         @Test
@@ -727,6 +748,13 @@ class CatalogApiIntegrationTests {
 
             assertProblem(response, 404, "PRODUCT_NOT_FOUND");
             assertThat(response.body()).doesNotContain("men-shirt").doesNotContain("Classic Shirt");
+        }
+
+        @ParameterizedTest(name = "slug={0}")
+        @ValueSource(strings = {"Men-Shirt", "men_shirt", "men shirt", "men-shirt-", "men--shirt"})
+        void malformedSlugReturnsSameProblemAsUnknownSlug(String slug) {
+            assertSameProblem(get("/api/v1/products/" + enc(slug)), get("/api/v1/products/does-not-exist"));
+            assertSameProblem(get("/api/v1/products/" + "m".repeat(201)), get("/api/v1/products/does-not-exist"));
         }
 
         @Test

@@ -5,6 +5,7 @@ import com.clothingstore.clothing_store_be.exception.category.CategoryNotFoundEx
 import com.clothingstore.clothing_store_be.mapper.category.CategoryMapper;
 import com.clothingstore.clothing_store_be.model.category.Category;
 import com.clothingstore.clothing_store_be.repository.category.CategoryRepository;
+import com.clothingstore.clothing_store_be.validation.CatalogSlugValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,7 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
     private final CategoryMapper categoryMapper;
+    private final CatalogSlugValidator catalogSlugValidator;
 
     public List<CategoryResponse> listActiveCategories() {
         return categoryMapper.toCategoryResponses(categoryRepository.findByActiveTrueOrderByDisplayOrderAscNameAsc());
@@ -27,7 +29,10 @@ public class CategoryService {
     }
 
     public Category requireActiveCategory(String slug) {
-        return categoryRepository.findBySlugAndActiveTrue(slug).orElseThrow(CategoryNotFoundException::new);
+        return Optional.ofNullable(slug)
+                .filter(catalogSlugValidator::isValidCatalogSlug)
+                .flatMap(categoryRepository::findBySlugAndActiveTrue)
+                .orElseThrow(CategoryNotFoundException::new);
     }
 
     public Optional<Category> findCategoryById(String categoryId) {

@@ -47,10 +47,12 @@ public class ProductController {
             description = "VALIDATION_ERROR: invalid page (0..${app.catalog.pagination.max-page}), "
                     + "size (1..${app.catalog.pagination.max-page-size}), sort or featured",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "CATEGORY_NOT_FOUND: unknown or inactive category slug",
+    @ApiResponse(responseCode = "404", description = "CATEGORY_NOT_FOUND: unknown, inactive or malformed category slug",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     public PageResponse<ProductCardResponse> listProducts(
-            @Parameter(description = "Active category slug") @RequestParam(required = false) String category,
+            @Parameter(description = "Active category slug: lowercase letters and digits in hyphen-separated words, "
+                    + "at most ${app.catalog.slug.max-length} characters")
+            @RequestParam(required = false) String category,
             @Parameter(description = "Filter by featured flag") @RequestParam(required = false) Boolean featured,
             @Parameter(description = "Zero-based page index, 0..${app.catalog.pagination.max-page}")
             @RequestParam(defaultValue = "0") @Min(0) @MaxConfiguredPage int page,
@@ -73,9 +75,12 @@ public class ProductController {
     @ApiResponse(responseCode = "200", description = "Product found, with variants (empty array when none)",
             headers = @Header(name = HttpHeaders.CACHE_CONTROL, description = "no-store",
                     schema = @Schema(type = "string")))
-    @ApiResponse(responseCode = "404", description = "PRODUCT_NOT_FOUND: missing or inactive",
+    @ApiResponse(responseCode = "404", description = "PRODUCT_NOT_FOUND: missing, inactive or malformed slug",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    public ResponseEntity<ProductDetailsResponse> getProduct(@PathVariable String slug) {
+    public ResponseEntity<ProductDetailsResponse> getProduct(
+            @Parameter(description = "Product slug: lowercase letters and digits in hyphen-separated words, "
+                    + "at most ${app.catalog.slug.max-length} characters")
+            @PathVariable String slug) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(productService.getProduct(slug));
     }
 }
